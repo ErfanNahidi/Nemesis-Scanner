@@ -3,8 +3,8 @@
 # Nemesis Scanner – Shadow Edition
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![مجوز](https://img.shields.io/badge/مجوز-فقط%20تست%20مجاز-red.svg)](#سلب-مسئولیت-قانونی)
-[![نسخه](https://img.shields.io/badge/نسخه-2.1.0-green.svg)]()
+[![License](https://img.shields.io/badge/license-Custom-red.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-2.1.0-green.svg)]()
 
 یک اسکنر پیشرفتهٔ شبکه و آسیب‌پذیری، مبتنی بر **Nmap** و مستقل از سیستم‌عامل.  
 مناسب برای تست‌نفوذ، تیم‌های قرمز و ممیزی امنیتی که به اسکن‌های سریع و عمیق روی **هر سیستم‌عاملی** نیاز دارند.
