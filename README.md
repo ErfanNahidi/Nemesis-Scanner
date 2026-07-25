@@ -1,4 +1,3 @@
-```markdown
 [🇮🇷 نسخهٔ فارسی](README-FA.md)
 
 # Nemesis Scanner – Shadow Edition
@@ -68,4 +67,3 @@ This tool is for **authorised security testing only**. You must have **explicit 
 Unauthorised scanning is illegal. The author assumes no liability for misuse.
 
 **Use at your own risk.**
-```
