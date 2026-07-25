@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
 # cli.py – Nemesis Scanner | Interactive Menu + CLI + Auto-Save in reports/
+# UI/UX inspired by Project Nemesis main dashboard
 # Requires: core.py (NemesisScanner, Reporter, VERSION)
 # =============================================================================
 import sys
@@ -11,100 +12,115 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from colorama import Fore, Style, init
-from tqdm import tqdm
-
-# Core imports
-from core import NemesisScanner, Reporter, VERSION as CORE_VERSION
-
-init(autoreset=True)
+# ---------- Import core with fallback for package vs standalone ----------
+try:
+    from .core import NemesisScanner, Reporter, VERSION as CORE_VERSION
+except ImportError:
+    from core import NemesisScanner, Reporter, VERSION as CORE_VERSION
 
 # ---------------------------------------------------------------------------
-# ASCII Art & Colors
+# Terminal colour & UI helpers (copied from main.py style)
 # ---------------------------------------------------------------------------
-LOGO = f"""
-{Fore.RED}
+class Colors:
+    RED     = "\033[1;31m"
+    MUTED   = "\033[0;31m"
+    CYAN    = "\033[1;36m"
+    YELLOW  = "\033[1;33m"
+    GREEN   = "\033[1;32m"
+    BOLD    = "\033[1m"
+    RESET   = "\033[0m"
+    # Box‑drawing (set to ASCII if not a TTY)
+    HLINE = "─"
+    VLINE = "│"
+    TOPL  = "┌"
+    TOPR  = "┐"
+    BOTL  = "└"
+    BOTR  = "┘"
+
+if not sys.stdout.isatty():
+    # Remove all ANSI escapes and use plain ASCII
+    for attr in dir(Colors):
+        if not attr.startswith("_") and isinstance(getattr(Colors, attr), str):
+            setattr(Colors, attr, "")
+    Colors.HLINE = "-"
+    Colors.VLINE = "|"
+    Colors.TOPL = "+"
+    Colors.TOPR = "+"
+    Colors.BOTL = "+"
+    Colors.BOTR = "+"
+
+def clear_screen():
+    os.system("clear" if os.name != "nt" else "cls")
+
+def banner(text: str):
+    width = 60
+    top = f"{Colors.RED}{Colors.TOPL}{Colors.HLINE * (width - 2)}{Colors.TOPR}"
+    pad = (width - 2 - len(text)) // 2
+    middle = (
+        f"{Colors.VLINE}{' ' * pad}{Colors.BOLD}{text}{Colors.RESET}{Colors.RED}"
+        f"{' ' * (width - 2 - len(text) - pad)}{Colors.VLINE}"
+    )
+    bottom = f"{Colors.BOTL}{Colors.HLINE * (width - 2)}{Colors.BOTR}{Colors.RESET}"
+    print(top)
+    print(middle)
+    print(bottom)
+
+def logo():
+    clear_screen()
+    print(f"""{Colors.RED}
 ███╗   ██╗███████╗███╗   ███╗███████╗███████╗██╗███████╗
 ████╗  ██║██╔════╝████╗ ████║██╔════╝██╔════╝██║██╔════╝
 ██╔██╗ ██║█████╗  ██╔████╔██║█████╗  ███████╗██║███████╗
 ██║╚██╗██║██╔══╝  ██║╚██╔╝██║██╔══╝  ╚════██║██║╚════██║
 ██║ ╚████║███████╗██║ ╚═╝ ██║███████╗███████║██║███████║
 ╚═╝  ╚═══╝╚══════╝╚═╝     ╚═╝╚══════╝╚══════╝╚═╝╚══════╝
-{Fore.CYAN}                 Nemesis Scanner – Shadow Edition v{CORE_VERSION}
-{Fore.LIGHTBLACK_EX}              « Silence before the storm »
-{Style.RESET_ALL}
-"""
+{Colors.RESET}""")
+    print(f"{Colors.MUTED}                 Nemesis Scanner – Shadow Edition v{CORE_VERSION}{Colors.RESET}\n")
 
-class Colors:
-    RED = Fore.RED
-    GREEN = Fore.GREEN
-    YELLOW = Fore.YELLOW
-    BLUE = Fore.BLUE
-    CYAN = Fore.CYAN
-    MAGENTA = Fore.MAGENTA
-    MUTED = Fore.LIGHTBLACK_EX
-    RESET = Style.RESET_ALL
-    BOLD = Style.BRIGHT
-
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def banner(text: str):
-    print(f"{Colors.BOLD}{Colors.CYAN}{'='*60}")
-    print(f"  {text}")
-    print(f"{'='*60}{Colors.RESET}")
-
-def logo():
-    print(LOGO)
+def pause():
+    input(f"\n{Colors.MUTED}Press Enter to return...{Colors.RESET}")
 
 # ---------------------------------------------------------------------------
 # Auto-save filename generator (inside reports/ folder)
 # ---------------------------------------------------------------------------
 def auto_save_filename(target: str, ext: str) -> str:
-    """
-    Generate a filename like reports/192.168.178.1_20260725_143015.json
-    Automatically creates the reports directory if missing.
-    """
     reports_dir = Path("reports")
     reports_dir.mkdir(parents=True, exist_ok=True)
-
     safe_target = target.replace('/', '_').replace(':', '_').replace('\\', '_')
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{safe_target}_{timestamp}.{ext}"
-    return str(reports_dir / filename)
+    return str(reports_dir / f"{safe_target}_{timestamp}.{ext}")
 
 # ---------------------------------------------------------------------------
-# Core scan execution (async wrapper)
+# Async scan runner
 # ---------------------------------------------------------------------------
 async def run_scan(targets: List[str], scan_args):
-    """Run scanner on multiple targets with progress display."""
     if not targets:
         return
     total = len(targets)
-    with tqdm(total=total, desc="Scanning", unit="target", colour="green") as pbar:
-        tasks = []
-        for t in targets:
-            scanner = NemesisScanner(
-                target=t,
-                scan_mode=scan_args.mode,
-                threads=scan_args.threads,
-                stealth=scan_args.stealth,
-                vuln_check=scan_args.vuln_check,
-                nmap_args_extra=scan_args.nmap_args or "",
-                nvd_api_key=getattr(scan_args, 'nvd_key', None),
-                vulners_api_key=getattr(scan_args, 'vulners_key', None),
-                aggressive=getattr(scan_args, 'aggressive', False),
-                turbo=getattr(scan_args, 'turbo', False),
-                fragment=getattr(scan_args, 'fragment', False),
-                source_port=getattr(scan_args, 'source_port', None),
-                spoof_mac=getattr(scan_args, 'spoof_mac', None),
-                decoys=getattr(scan_args, 'decoys', None),
-                ttl=getattr(scan_args, 'ttl', None),
-                auth_check=getattr(scan_args, 'auth_check', False),
-            )
-            tasks.append(scanner.full_analysis())
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        pbar.update(total)
+    # Simple progress indicator
+    print(f"{Colors.CYAN}Starting scan of {total} target(s)...{Colors.RESET}")
+    tasks = []
+    for t in targets:
+        scanner = NemesisScanner(
+            target=t,
+            scan_mode=scan_args.mode,
+            threads=scan_args.threads,
+            stealth=scan_args.stealth,
+            vuln_check=scan_args.vuln_check,
+            nmap_args_extra=scan_args.nmap_args or "",
+            nvd_api_key=getattr(scan_args, 'nvd_key', None),
+            vulners_api_key=getattr(scan_args, 'vulners_key', None),
+            aggressive=getattr(scan_args, 'aggressive', False),
+            turbo=getattr(scan_args, 'turbo', False),
+            fragment=getattr(scan_args, 'fragment', False),
+            source_port=getattr(scan_args, 'source_port', None),
+            spoof_mac=getattr(scan_args, 'spoof_mac', None),
+            decoys=getattr(scan_args, 'decoys', None),
+            ttl=getattr(scan_args, 'ttl', None),
+            auth_check=getattr(scan_args, 'auth_check', False),
+        )
+        tasks.append(scanner.full_analysis())
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for result in results:
         if isinstance(result, Exception):
@@ -112,9 +128,9 @@ async def run_scan(targets: List[str], scan_args):
             continue
         if not result:
             continue
-
         Reporter.console_report(result, verbose=getattr(scan_args, 'verbose', False))
 
+        # Save reports based on user choice
         if getattr(scan_args, 'output', None):
             base = scan_args.output
             fmt = getattr(scan_args, 'format', 'json')
@@ -138,33 +154,28 @@ async def run_scan(targets: List[str], scan_args):
                 Reporter.html_report(result, fname)
             print(f"{Colors.GREEN}Auto-saved report to {fname}{Colors.RESET}")
 
-        if getattr(scan_args, 'email', None):
-            pass
-        if getattr(scan_args, 'slack', None):
-            pass
-
 def run_scan_sync(targets: List[str], args):
     asyncio.run(run_scan(targets, args))
 
 # ---------------------------------------------------------------------------
-# Menu Classes
+# Scanner Menu – designed to match the main dashboard UI
 # ---------------------------------------------------------------------------
 class ScannerMenu:
-    """Interactive menu interface for the Nemesis Scanner."""
+    """Interactive menu interface for Nemesis Scanner."""
 
     @staticmethod
     def main_menu():
         while True:
             clear_screen()
             logo()
-            banner("Main Menu")
+            banner("Scanner Main Menu")
             print(f"""{Colors.YELLOW}
   [1] Quick Scan (presets)
   [2] Advanced Configuration (wizard)
   [3] Enter raw scanner arguments
   [4] About
-  [5] Update             
-  [0] Exit
+  [5] Update & Maintenance
+  [0] Return to Dashboard
 {Colors.RESET}""")
             choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
             if choice == "1":
@@ -178,15 +189,14 @@ class ScannerMenu:
             elif choice == "5":
                 ScannerMenu.update()
             elif choice == "0":
-                print(f"{Colors.GREEN}Exiting Nemesis Scanner...{Colors.RESET}")
-                sys.exit(0)
+                return  # exit the scanner menu, back to main dashboard
             else:
-                print(f"{Colors.RED}Invalid option, press Enter to continue...{Colors.RESET}")
-                input()
+                print(f"{Colors.RED}Invalid option.{Colors.RESET}")
+                pause()
 
-    # -----------------------------------------------------------------------
-    # About information
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------
+    # About
+    # -------------------------------------------------------------------
     ABOUT_ME = """
 I'm Erfan Nahidi
 Virtualization & Infrastructure Administrator
@@ -202,72 +212,40 @@ infrastructure engineering.
         clear_screen()
         logo()
         banner("About Nemesis Scanner")
-        print(f"{Colors.CYAN}Version: {CORE_VERSION}{Colors.RESET}")
-        print(f"{Colors.MUTED}Author: Erfan Nahidi{Colors.RESET}")
+        print(f"{Colors.CYAN}{ScannerMenu.ABOUT_ME.strip()}{Colors.RESET}")
+        print(f"\n{Colors.MUTED}Version: {CORE_VERSION}{Colors.RESET}")
         print(f"{Colors.MUTED}GitHub: https://github.com/ErfanNahidi/Nemesis-Scanner{Colors.RESET}")
-        print(ScannerMenu.ABOUT_ME)
-        print(f"\n{Colors.MUTED}Project: Nemesis Scanner – A powerful network scanner with vulnerability detection.{Colors.RESET}")
-        input(f"{Colors.GREEN}Press Enter to continue...{Colors.RESET}")
+        pause()
 
-    # -----------------------------------------------------------------------
-    # Update & Maintenance (with clone, pull, and requirements)
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------
+    # Update & Maintenance (simplified)
+    # -------------------------------------------------------------------
     @staticmethod
     def update():
         clear_screen()
         logo()
         banner("Update & Maintenance")
-        while True:
-            print(f"""{Colors.YELLOW}
-  [1] Update source code via git pull (if already cloned)
-  [2] Clone repository from GitHub (if not cloned)
-  [3] Install/update Python dependencies (requirements.txt)
+        print(f"""{Colors.YELLOW}
+  [1] Install/update Python dependencies (requirements.txt)
   [0] Back
 {Colors.RESET}""")
-            choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
-            if choice == "1":
-                if os.path.isdir(".git"):
-                    print(f"{Colors.CYAN}Running git pull...{Colors.RESET}")
-                    ret = os.system("git pull origin main 2>&1")
-                    if ret == 0:
-                        print(f"{Colors.GREEN}Update successful.{Colors.RESET}")
-                    else:
-                        print(f"{Colors.RED}Update failed. Check your network or git configuration.{Colors.RESET}")
+        choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
+        if choice == "1":
+            if os.path.exists("requirements.txt"):
+                print(f"{Colors.CYAN}Installing from requirements.txt...{Colors.RESET}")
+                ret = os.system(f"{sys.executable} -m pip install -r requirements.txt")
+                if ret == 0:
+                    print(f"{Colors.GREEN}Dependencies updated.{Colors.RESET}")
                 else:
-                    print(f"{Colors.RED}Not a git repository. Use option 2 to clone first.{Colors.RESET}")
-                input("Press Enter to continue...")
-            elif choice == "2":
-                repo_url = "https://github.com/ErfanNahidi/Nemesis-Scanner.git"
-                if os.path.exists(".git"):
-                    print(f"{Colors.YELLOW}Already a git repository. If you want to re-clone, delete .git folder first.{Colors.RESET}")
-                else:
-                    print(f"{Colors.CYAN}Cloning repository from {repo_url} ...{Colors.RESET}")
-                    ret = os.system(f"git clone {repo_url} . 2>&1")
-                    if ret == 0:
-                        print(f"{Colors.GREEN}Clone successful.{Colors.RESET}")
-                    else:
-                        print(f"{Colors.RED}Clone failed. Maybe directory is not empty or network issue.{Colors.RESET}")
-                input("Press Enter to continue...")
-            elif choice == "3":
-                if os.path.exists("requirements.txt"):
-                    print(f"{Colors.CYAN}Installing/updating dependencies from requirements.txt...{Colors.RESET}")
-                    ret = os.system("pip install -r requirements.txt 2>&1")
-                    if ret == 0:
-                        print(f"{Colors.GREEN}Dependencies installed/updated successfully.{Colors.RESET}")
-                    else:
-                        print(f"{Colors.RED}Installation failed. Check pip and requirements file.{Colors.RESET}")
-                else:
-                    print(f"{Colors.RED}requirements.txt not found in current directory.{Colors.RESET}")
-                input("Press Enter to continue...")
-            elif choice == "0":
-                break
+                    print(f"{Colors.RED}Installation failed.{Colors.RESET}")
             else:
-                print(f"{Colors.RED}Invalid choice.{Colors.RESET}")
-                input("Press Enter to continue...")
+                print(f"{Colors.RED}requirements.txt not found.{Colors.RESET}")
+            pause()
+        # else just back
 
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------
     # Quick scan profiles
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------
     @staticmethod
     def quick_menu():
         while True:
@@ -287,7 +265,7 @@ infrastructure engineering.
                 target = input(f"{Colors.CYAN}Target (IP or CIDR): {Colors.RESET}").strip()
                 if not target:
                     print(f"{Colors.RED}Target is required!{Colors.RESET}")
-                    input("Press Enter...")
+                    pause()
                     continue
 
                 args = argparse.Namespace()
@@ -333,16 +311,16 @@ infrastructure engineering.
                     args.format = fmt if fmt in ("json", "csv", "html") else "json"
 
                 run_scan_sync([target], args)
-                input(f"{Colors.GREEN}Press Enter to continue...{Colors.RESET}")
+                pause()
             elif choice == "0":
                 break
             else:
                 print(f"{Colors.RED}Invalid option.{Colors.RESET}")
-                input("Press Enter...")
+                pause()
 
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------
     # Advanced wizard
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------
     @staticmethod
     def advanced_wizard():
         clear_screen()
@@ -352,7 +330,7 @@ infrastructure engineering.
         target = input(f"{Colors.CYAN}Target(s) (IP/CIDR, required): {Colors.RESET}").strip()
         if not target:
             print(f"{Colors.RED}Target is required.{Colors.RESET}")
-            input("Press Enter...")
+            pause()
             return
         args = argparse.Namespace()
         args.targets = [t.strip() for t in target.split(',') if t.strip()]
@@ -412,11 +390,11 @@ infrastructure engineering.
         if args.aggressive: print(f"{Colors.RED}Aggressive mode ON{Colors.RESET}")
         if input(f"{Colors.CYAN}Start scan? [Y/n]: {Colors.RESET}").strip().lower() in ("", "y"):
             run_scan_sync(args.targets, args)
-        input(f"{Colors.GREEN}Press Enter to continue...{Colors.RESET}")
+        pause()
 
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------
     # Raw CLI arguments entry
-    # -----------------------------------------------------------------------
+    # -------------------------------------------------------------------
     @staticmethod
     def raw_args():
         clear_screen()
@@ -433,13 +411,14 @@ infrastructure engineering.
             args = parse_args()
             if not args.targets:
                 print(f"{Colors.RED}No targets specified.{Colors.RESET}")
+                pause()
                 return
             run_scan_sync(args.targets, args)
         except SystemExit:
             pass
         finally:
             sys.argv = old_argv
-        input(f"{Colors.GREEN}Press Enter to continue...{Colors.RESET}")
+        pause()
 
 # ---------------------------------------------------------------------------
 # Argparse for direct CLI usage (non-interactive)
