@@ -3,7 +3,7 @@
 # Nemesis Scanner – Shadow Edition
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-Authorised%20testing%20only-red.svg)](#legal-disclaimer)
+[![License](https://img.shields.io/badge/license-Custom-red.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-2.1.0-green.svg)]()
 
 An advanced, cross‑platform network reconnaissance and vulnerability scanner built on **Nmap**.  
