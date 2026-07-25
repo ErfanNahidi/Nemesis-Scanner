@@ -7,12 +7,12 @@ import sys
 import os
 import asyncio
 import argparse
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 from colorama import Fore, Style, init
+from tqdm import tqdm
 
 # Core imports
 from core import NemesisScanner, Reporter, VERSION as CORE_VERSION
@@ -65,11 +65,9 @@ def auto_save_filename(target: str, ext: str) -> str:
     Generate a filename like reports/192.168.178.1_20260725_143015.json
     Automatically creates the reports directory if missing.
     """
-    # Create reports directory if it doesn't exist
     reports_dir = Path("reports")
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    # Sanitize target for filename
     safe_target = target.replace('/', '_').replace(':', '_').replace('\\', '_')
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{safe_target}_{timestamp}.{ext}"
@@ -82,7 +80,6 @@ async def run_scan(targets: List[str], scan_args):
     """Run scanner on multiple targets with progress display."""
     if not targets:
         return
-    from tqdm import tqdm
     total = len(targets)
     with tqdm(total=total, desc="Scanning", unit="target", colour="green") as pbar:
         tasks = []
@@ -94,16 +91,16 @@ async def run_scan(targets: List[str], scan_args):
                 stealth=scan_args.stealth,
                 vuln_check=scan_args.vuln_check,
                 nmap_args_extra=scan_args.nmap_args or "",
-                nvd_api_key=scan_args.nvd_key,
-                vulners_api_key=scan_args.vulners_key,
-                aggressive=scan_args.aggressive,
-                turbo=scan_args.turbo,
-                fragment=scan_args.fragment,
-                source_port=scan_args.source_port,
-                spoof_mac=scan_args.spoof_mac,
-                decoys=scan_args.decoys,
-                ttl=scan_args.ttl,
-                auth_check=scan_args.auth_check,
+                nvd_api_key=getattr(scan_args, 'nvd_key', None),
+                vulners_api_key=getattr(scan_args, 'vulners_key', None),
+                aggressive=getattr(scan_args, 'aggressive', False),
+                turbo=getattr(scan_args, 'turbo', False),
+                fragment=getattr(scan_args, 'fragment', False),
+                source_port=getattr(scan_args, 'source_port', None),
+                spoof_mac=getattr(scan_args, 'spoof_mac', None),
+                decoys=getattr(scan_args, 'decoys', None),
+                ttl=getattr(scan_args, 'ttl', None),
+                auth_check=getattr(scan_args, 'auth_check', False),
             )
             tasks.append(scanner.full_analysis())
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -116,21 +113,22 @@ async def run_scan(targets: List[str], scan_args):
         if not result:
             continue
 
-        Reporter.console_report(result, verbose=scan_args.verbose)
+        Reporter.console_report(result, verbose=getattr(scan_args, 'verbose', False))
 
-        # Standard output file naming (-o)
-        if scan_args.output:
+        if getattr(scan_args, 'output', None):
             base = scan_args.output
-            if scan_args.format in ("json", "all"):
+            fmt = getattr(scan_args, 'format', 'json')
+            if fmt in ("json", "all"):
                 Reporter.json_report(result, f"{base}.json")
-            if scan_args.format in ("csv", "all"):
+            if fmt in ("csv", "all"):
                 Reporter.csv_report(result, f"{base}.csv")
-            if scan_args.format in ("html", "all"):
+            if fmt in ("html", "all"):
                 Reporter.html_report(result, f"{base}.html")
 
-        # Auto-save feature (IP + timestamp) inside reports/
         if getattr(scan_args, 'auto_save', False):
-            fmt = scan_args.format if scan_args.format != 'all' else 'json'
+            fmt = getattr(scan_args, 'format', 'json')
+            if fmt == 'all':
+                fmt = 'json'
             fname = auto_save_filename(result['target'], fmt)
             if fmt == "json":
                 Reporter.json_report(result, fname)
@@ -140,10 +138,10 @@ async def run_scan(targets: List[str], scan_args):
                 Reporter.html_report(result, fname)
             print(f"{Colors.GREEN}Auto-saved report to {fname}{Colors.RESET}")
 
-        if scan_args.email:
+        if getattr(scan_args, 'email', None):
             pass
-        if scan_args.slack:
-            Reporter.slack_webhook(result, scan_args.slack)
+        if getattr(scan_args, 'slack', None):
+            pass
 
 def run_scan_sync(targets: List[str], args):
     asyncio.run(run_scan(targets, args))
@@ -164,6 +162,8 @@ class ScannerMenu:
   [1] Quick Scan (presets)
   [2] Advanced Configuration (wizard)
   [3] Enter raw scanner arguments
+  [4] About
+  [5] Update             
   [0] Exit
 {Colors.RESET}""")
             choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
@@ -173,6 +173,10 @@ class ScannerMenu:
                 ScannerMenu.advanced_wizard()
             elif choice == "3":
                 ScannerMenu.raw_args()
+            elif choice == "4":
+                ScannerMenu.about()
+            elif choice == "5":
+                ScannerMenu.update()
             elif choice == "0":
                 print(f"{Colors.GREEN}Exiting Nemesis Scanner...{Colors.RESET}")
                 sys.exit(0)
@@ -180,6 +184,90 @@ class ScannerMenu:
                 print(f"{Colors.RED}Invalid option, press Enter to continue...{Colors.RESET}")
                 input()
 
+    # -----------------------------------------------------------------------
+    # About information
+    # -----------------------------------------------------------------------
+    ABOUT_ME = """
+I'm Erfan Nahidi
+Virtualization & Infrastructure Administrator
+
+Focused on designing scalable, resilient, and high-performance datacenter
+infrastructures. Passionate about virtualization, Linux systems, networking,
+and low-level computing, with a strong interest in systems programming and
+infrastructure engineering.
+"""
+
+    @staticmethod
+    def about():
+        clear_screen()
+        logo()
+        banner("About Nemesis Scanner")
+        print(f"{Colors.CYAN}Version: {CORE_VERSION}{Colors.RESET}")
+        print(f"{Colors.MUTED}Author: Erfan Nahidi{Colors.RESET}")
+        print(f"{Colors.MUTED}GitHub: https://github.com/ErfanNahidi/Nemesis-Scanner{Colors.RESET}")
+        print(ScannerMenu.ABOUT_ME)
+        print(f"\n{Colors.MUTED}Project: Nemesis Scanner – A powerful network scanner with vulnerability detection.{Colors.RESET}")
+        input(f"{Colors.GREEN}Press Enter to continue...{Colors.RESET}")
+
+    # -----------------------------------------------------------------------
+    # Update & Maintenance (with clone, pull, and requirements)
+    # -----------------------------------------------------------------------
+    @staticmethod
+    def update():
+        clear_screen()
+        logo()
+        banner("Update & Maintenance")
+        while True:
+            print(f"""{Colors.YELLOW}
+  [1] Update source code via git pull (if already cloned)
+  [2] Clone repository from GitHub (if not cloned)
+  [3] Install/update Python dependencies (requirements.txt)
+  [0] Back
+{Colors.RESET}""")
+            choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
+            if choice == "1":
+                if os.path.isdir(".git"):
+                    print(f"{Colors.CYAN}Running git pull...{Colors.RESET}")
+                    ret = os.system("git pull origin main 2>&1")
+                    if ret == 0:
+                        print(f"{Colors.GREEN}Update successful.{Colors.RESET}")
+                    else:
+                        print(f"{Colors.RED}Update failed. Check your network or git configuration.{Colors.RESET}")
+                else:
+                    print(f"{Colors.RED}Not a git repository. Use option 2 to clone first.{Colors.RESET}")
+                input("Press Enter to continue...")
+            elif choice == "2":
+                repo_url = "https://github.com/ErfanNahidi/Nemesis-Scanner.git"
+                if os.path.exists(".git"):
+                    print(f"{Colors.YELLOW}Already a git repository. If you want to re-clone, delete .git folder first.{Colors.RESET}")
+                else:
+                    print(f"{Colors.CYAN}Cloning repository from {repo_url} ...{Colors.RESET}")
+                    ret = os.system(f"git clone {repo_url} . 2>&1")
+                    if ret == 0:
+                        print(f"{Colors.GREEN}Clone successful.{Colors.RESET}")
+                    else:
+                        print(f"{Colors.RED}Clone failed. Maybe directory is not empty or network issue.{Colors.RESET}")
+                input("Press Enter to continue...")
+            elif choice == "3":
+                if os.path.exists("requirements.txt"):
+                    print(f"{Colors.CYAN}Installing/updating dependencies from requirements.txt...{Colors.RESET}")
+                    ret = os.system("pip install -r requirements.txt 2>&1")
+                    if ret == 0:
+                        print(f"{Colors.GREEN}Dependencies installed/updated successfully.{Colors.RESET}")
+                    else:
+                        print(f"{Colors.RED}Installation failed. Check pip and requirements file.{Colors.RESET}")
+                else:
+                    print(f"{Colors.RED}requirements.txt not found in current directory.{Colors.RESET}")
+                input("Press Enter to continue...")
+            elif choice == "0":
+                break
+            else:
+                print(f"{Colors.RED}Invalid choice.{Colors.RESET}")
+                input("Press Enter to continue...")
+
+    # -----------------------------------------------------------------------
+    # Quick scan profiles
+    # -----------------------------------------------------------------------
     @staticmethod
     def quick_menu():
         while True:
@@ -252,6 +340,9 @@ class ScannerMenu:
                 print(f"{Colors.RED}Invalid option.{Colors.RESET}")
                 input("Press Enter...")
 
+    # -----------------------------------------------------------------------
+    # Advanced wizard
+    # -----------------------------------------------------------------------
     @staticmethod
     def advanced_wizard():
         clear_screen()
@@ -307,6 +398,8 @@ class ScannerMenu:
         ttl = input(f"{Colors.CYAN}TTL value (Enter to skip): {Colors.RESET}").strip()
         args.ttl = int(ttl) if ttl.isdigit() else None
         args.auth_check = input(f"{Colors.CYAN}Basic auth check? [y/N]: {Colors.RESET}").strip().lower() == "y"
+        args.email = None
+        args.slack = None
 
         clear_screen()
         banner("Review Your Configuration")
@@ -321,6 +414,9 @@ class ScannerMenu:
             run_scan_sync(args.targets, args)
         input(f"{Colors.GREEN}Press Enter to continue...{Colors.RESET}")
 
+    # -----------------------------------------------------------------------
+    # Raw CLI arguments entry
+    # -----------------------------------------------------------------------
     @staticmethod
     def raw_args():
         clear_screen()
