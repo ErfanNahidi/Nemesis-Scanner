@@ -1,0 +1,6 @@
+python-nmap
+requests
+tqdm
+colorama
+pyyaml
+jinja2
