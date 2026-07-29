@@ -6,9 +6,6 @@
 [![License](https://img.shields.io/badge/license-Custom-red.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-3.0.0-green.svg)]()
 
-**Author:** Erfan Nahidi  
-**License:** For authorised security testing only.  
-**Repository:** [https://github.com/ErfanNahidi/Nemesis-Scanner](https://github.com/ErfanNahidi/Nemesis-Scanner)
 
 ---
 
