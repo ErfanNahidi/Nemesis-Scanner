@@ -14,9 +14,10 @@ from typing import List, Optional
 
 # ---------- Import core with fallback for package vs standalone ----------
 try:
-    from .core import NemesisScanner, Reporter, VERSION as CORE_VERSION
+    from core.core import NemesisScanner, Reporter, VERSION as CORE_VERSION
 except ImportError:
-    from core import NemesisScanner, Reporter, VERSION as CORE_VERSION
+    # Fallback – optional, can be removed once all scripts are updated
+    from core.core import NemesisScanner, Reporter, VERSION as CORE_VERSION
 
 # ---------------------------------------------------------------------------
 # Terminal colour & UI helpers (copied from main.py style)
