@@ -1,4 +1,4 @@
-[🇮🇷 نسخهٔ فارسی](README-FA.md)
+[🇮🇷 نسخهٔ فارسی](README_FA.md)
 
 # Nemesis Scanner – Shadow Edition
 
