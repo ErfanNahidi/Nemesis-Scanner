@@ -48,7 +48,7 @@ init(autoreset=True)
 # ---------------------------------------------------------------------------
 # Constants & Configuration
 # ---------------------------------------------------------------------------
-VERSION = "2.2.0"
+VERSION = "3.0.0"
 
 # API endpoints
 NVD_API_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"

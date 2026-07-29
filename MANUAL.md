@@ -1,5 +1,5 @@
 ```markdown
-# Nemesis Scanner – Shadow Edition v3.1.0
+# Nemesis Scanner – Shadow Edition v3.0.0
 
 **Author:** Erfan Nahidi  
 **License:** For authorised security testing only.  
