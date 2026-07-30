@@ -2,12 +2,14 @@
 # =============================================================================
 # cli.py – Nemesis Scanner | Interactive Menu + CLI + Auto-Save in reports/
 # UI/UX inspired by Project Nemesis main dashboard
-# Requires: core.py (NemesisScanner, Reporter, VERSION) – Monster Edition v2.2.0
+# Requires: core.py (NemesisScanner, Reporter, VERSION) – Monster Edition v3.0.0
 # =============================================================================
 import sys
 import os
 import asyncio
 import argparse
+import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -260,25 +262,148 @@ infrastructure engineering.
     # --------------------------- update -----------------------------------
     @staticmethod
     def update():
-        clear_screen()
-        logo()
-        banner("Update & Maintenance")
-        print(f"""{Colors.YELLOW}
-  [1] Install/update Python dependencies (requirements.txt)
+        while True:
+            clear_screen()
+            logo()
+            banner("Update & Maintenance")
+            print(f"{Colors.CYAN}Current version: {Colors.BOLD}{CORE_VERSION}{Colors.RESET}\n")
+            print(f"""{Colors.YELLOW}
+  [1] Check for updates (git pull)
+  [2] Install/update Python dependencies (pip install -r requirements.txt)
+  [3] Force reinstall all dependencies
+  [4] View installed packages
   [0] Back
 {Colors.RESET}""")
-        choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
-        if choice == "1":
-            if os.path.exists("requirements.txt"):
-                print(f"{Colors.CYAN}Installing from requirements.txt...{Colors.RESET}")
-                ret = os.system(f"{sys.executable} -m pip install -r requirements.txt")
-                if ret == 0:
-                    print(f"{Colors.GREEN}Dependencies updated.{Colors.RESET}")
+            
+            choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
+            
+            if choice == "0":
+                break
+            
+            elif choice == "1":
+                # Git pull update
+                print()
+                if os.path.isdir('.git'):
+                    print(f"{Colors.CYAN}Local Git repository detected.{Colors.RESET}")
+                    print(f"{Colors.CYAN}Fetching latest changes...{Colors.RESET}")
+                    
+                    try:
+                        # First fetch to check for updates
+                        result = subprocess.run(['git', 'fetch'], capture_output=True, text=True)
+                        if result.returncode != 0:
+                            print(f"{Colors.RED}Failed to fetch from remote.{Colors.RESET}")
+                            print(result.stderr)
+                            pause()
+                            continue
+                        
+                        # Check if we're behind
+                        status = subprocess.run(['git', 'status', '-uno'], capture_output=True, text=True)
+                        if 'Your branch is behind' in status.stdout:
+                            print(f"{Colors.YELLOW}Updates available!{Colors.RESET}")
+                            if input(f"{Colors.YELLOW}Run 'git pull' to update? [y/N]: {Colors.RESET}").strip().lower() in ("y","yes"):
+                                print(f"{Colors.CYAN}Running git pull...{Colors.RESET}")
+                                result = subprocess.run(['git', 'pull'], capture_output=True, text=True)
+                                if result.returncode == 0:
+                                    print(f"{Colors.GREEN}✓ Update successful!{Colors.RESET}")
+                                    print(result.stdout)
+                                    print(f"\n{Colors.YELLOW}Please restart the tool to use the new version.{Colors.RESET}")
+                                    
+                                    # Offer to update requirements
+                                    if os.path.exists("requirements.txt"):
+                                        if input(f"{Colors.CYAN}Update Python dependencies too? [Y/n]: {Colors.RESET}").strip().lower() not in ("n","no"):
+                                            print(f"{Colors.CYAN}Updating dependencies...{Colors.RESET}")
+                                            ret = os.system(f"{sys.executable} -m pip install -r requirements.txt")
+                                            if ret == 0:
+                                                print(f"{Colors.GREEN}✓ Dependencies updated.{Colors.RESET}")
+                                            else:
+                                                print(f"{Colors.RED}Dependency update failed.{Colors.RESET}")
+                                else:
+                                    print(f"{Colors.RED}Update failed:{Colors.RESET}")
+                                    print(result.stderr)
+                            else:
+                                print(f"{Colors.MUTED}Update skipped.{Colors.RESET}")
+                        elif 'Your branch is up to date' in status.stdout:
+                            print(f"{Colors.GREEN}✓ You are already up to date!{Colors.RESET}")
+                        else:
+                            print(f"{Colors.YELLOW}Unable to determine update status.{Colors.RESET}")
+                            print(f"{Colors.MUTED}Try manual: git pull{Colors.RESET}")
+                    except Exception as e:
+                        print(f"{Colors.RED}Error running git: {e}{Colors.RESET}")
                 else:
-                    print(f"{Colors.RED}Installation failed.{Colors.RESET}")
+                    print(f"{Colors.MUTED}No .git folder found.{Colors.RESET}")
+                    print(f"{Colors.CYAN}To get updates, clone the repository:{Colors.RESET}")
+                    print(f"  {Colors.BOLD}git clone https://github.com/ErfanNahidi/Nemesis-Scanner.git{Colors.RESET}")
+                    print(f"{Colors.MUTED}Or download the latest release from GitHub.{Colors.RESET}")
+                pause()
+            
+            elif choice == "2":
+                # Install/update dependencies
+                print()
+                if os.path.exists("requirements.txt"):
+                    print(f"{Colors.CYAN}Installing/updating dependencies from requirements.txt...{Colors.RESET}")
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt'],
+                            capture_output=True, text=True
+                        )
+                        if result.returncode == 0:
+                            print(f"{Colors.GREEN}✓ Dependencies installed/updated successfully!{Colors.RESET}")
+                            # Show what was installed
+                            for line in result.stdout.split('\n'):
+                                if 'Successfully installed' in line:
+                                    print(f"  {Colors.CYAN}{line}{Colors.RESET}")
+                        else:
+                            print(f"{Colors.RED}Installation failed:{Colors.RESET}")
+                            print(result.stderr)
+                            print(f"\n{Colors.YELLOW}Tip: You may need to run with sudo or use a virtual environment.{Colors.RESET}")
+                    except Exception as e:
+                        print(f"{Colors.RED}Error running pip: {e}{Colors.RESET}")
+                else:
+                    print(f"{Colors.RED}requirements.txt not found in current directory.{Colors.RESET}")
+                    print(f"{Colors.MUTED}Make sure you're in the project root directory.{Colors.RESET}")
+                pause()
+            
+            elif choice == "3":
+                # Force reinstall
+                print()
+                if os.path.exists("requirements.txt"):
+                    print(f"{Colors.YELLOW}Force reinstalling all dependencies...{Colors.RESET}")
+                    if input(f"{Colors.YELLOW}This will reinstall all packages. Continue? [y/N]: {Colors.RESET}").strip().lower() in ("y","yes"):
+                        try:
+                            result = subprocess.run(
+                                [sys.executable, '-m', 'pip', 'install', '--force-reinstall', '-r', 'requirements.txt'],
+                                capture_output=True, text=True
+                            )
+                            if result.returncode == 0:
+                                print(f"{Colors.GREEN}✓ All dependencies reinstalled successfully!{Colors.RESET}")
+                            else:
+                                print(f"{Colors.RED}Reinstallation failed:{Colors.RESET}")
+                                print(result.stderr)
+                        except Exception as e:
+                            print(f"{Colors.RED}Error running pip: {e}{Colors.RESET}")
+                    else:
+                        print(f"{Colors.MUTED}Reinstall cancelled.{Colors.RESET}")
+                else:
+                    print(f"{Colors.RED}requirements.txt not found.{Colors.RESET}")
+                pause()
+            
+            elif choice == "4":
+                # View installed packages
+                print()
+                print(f"{Colors.CYAN}Installed Python packages:{Colors.RESET}")
+                try:
+                    result = subprocess.run(
+                        [sys.executable, '-m', 'pip', 'list'],
+                        capture_output=True, text=True
+                    )
+                    print(result.stdout)
+                except Exception as e:
+                    print(f"{Colors.RED}Error listing packages: {e}{Colors.RESET}")
+                pause()
+            
             else:
-                print(f"{Colors.RED}requirements.txt not found.{Colors.RESET}")
-            pause()
+                print(f"{Colors.RED}Invalid option.{Colors.RESET}")
+                time.sleep(0.5)
 
     # -------------------------------------------------------------------
     # Network scan presets
@@ -340,7 +465,7 @@ infrastructure engineering.
                 pause()
 
     # -------------------------------------------------------------------
-    # Vulnerability scan presets (updated with new middle option)
+    # Vulnerability scan presets
     # -------------------------------------------------------------------
     @staticmethod
     def vuln_scan_menu():
@@ -366,31 +491,25 @@ infrastructure engineering.
                     continue
                 args = None
                 if choice == "1":
-                    # Quick: common ports, version detection light, NSE scripts, no API
                     args = build_scan_args([target], mode="quick", vuln_check=True,
                                            threads=10, auto_save=False)
                 elif choice == "2":
-                    # Common (moderate): top 1000 ports, full version detection, NSE scripts, no API
                     args = build_scan_args([target], mode="common", vuln_check=True,
                                            threads=10, auto_save=False)
                 elif choice == "3":
-                    # Deep: common mode, NSE, online NVD/Vulners, deep inspection
                     nvd = input(f"{Colors.CYAN}NVD API key (optional): {Colors.RESET}").strip() or None
                     vulners = input(f"{Colors.CYAN}Vulners API key (optional): {Colors.RESET}").strip() or None
                     args = build_scan_args([target], mode="common", vuln_check=True,
                                            nvd_key=nvd, vulners_key=vulners,
                                            deep_inspect=True, auto_save=False)
                 elif choice == "4":
-                    # Web: quick mode, no NSE vuln scripts, but deep_inspect for HTTP/TLS checks
                     args = build_scan_args([target], mode="quick", vuln_check=False,
                                            deep_inspect=True, auto_save=False)
                 elif choice == "5":
-                    # AD focused: common mode, NSE, no API, extra nmap args if needed
                     extra = input(f"{Colors.CYAN}Additional Nmap args (or Enter): {Colors.RESET}").strip()
                     args = build_scan_args([target], mode="common", vuln_check=True,
                                            nmap_args=extra, auto_save=False)
                 elif choice == "6":
-                    # Custom
                     mode = input(f"{Colors.CYAN}Mode (quick/common/full) [quick]: {Colors.RESET}").strip().lower() or "quick"
                     vuln = input(f"{Colors.CYAN}Use NSE vuln scripts? [Y/n]: {Colors.RESET}").strip().lower() != "n"
                     nvd = input(f"{Colors.CYAN}NVD API key (optional): {Colors.RESET}").strip() or None
@@ -413,7 +532,7 @@ infrastructure engineering.
                 pause()
 
     # -------------------------------------------------------------------
-    # Combined network + vulnerability scan (full attack surface)
+    # Combined network + vulnerability scan
     # -------------------------------------------------------------------
     @staticmethod
     def combined_scan_menu():
