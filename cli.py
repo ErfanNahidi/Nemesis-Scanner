@@ -79,7 +79,7 @@ def logo():
 ██║ ╚████║███████╗██║ ╚═╝ ██║███████╗███████║██║███████║
 ╚═╝  ╚═══╝╚══════╝╚═╝     ╚═╝╚══════╝╚══════╝╚═╝╚══════╝
 {Colors.RESET}""")
-    print(f"{Colors.MUTED}                 Nemesis Scanner – Shadow Edition v{CORE_VERSION}{Colors.RESET}\n")
+    print(f"{Colors.MUTED}                 Nemesis Scanner – Monster Edition v{CORE_VERSION}{Colors.RESET}\n")
 
 def pause():
     input(f"\n{Colors.MUTED}Press Enter to return...{Colors.RESET}")
