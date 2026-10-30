@@ -2,7 +2,7 @@
 # =============================================================================
 # cli.py – Nemesis Scanner | Interactive Menu + CLI + Auto-Save in reports/
 # UI/UX inspired by Project Nemesis main dashboard
-# Requires: core.py (NemesisScanner, Reporter, VERSION) – Nemesis Scanner v4.0.0
+# Requires: core.py (NemesisScanner, Reporter, VERSION) – Nemesis Scanner v4.1.0
 # =============================================================================
 import sys
 import os
@@ -417,25 +417,30 @@ infrastructure engineering.
                     continue
                 args = None
                 if choice == "1":
-                    args = build_scan_args([target], mode="quick", threads=10,
-                                           vuln_check=False, auto_save=False)
+                    args = build_scan_args([target], mode="quick", threads=12,
+                                           vuln_check=True, deep_inspect=False,
+                                           auto_save=False)
                 elif choice == "2":
-                    args = build_scan_args([target], mode="full", threads=10,
-                                           vuln_check=False, auto_save=False)
+                    args = build_scan_args([target], mode="full", threads=8,
+                                           vuln_check=False, deep_inspect=False,
+                                           auto_save=False)
                 elif choice == "3":
                     args = build_scan_args([target], mode="turbo", turbo=True,
-                                           vuln_check=False, auto_save=False)
+                                           vuln_check=False, deep_inspect=False,
+                                           auto_save=False)
                 elif choice == "4":
                     args = build_scan_args([target], mode="quick", stealth=True,
                                            fragment=True, vuln_check=False,
-                                           auto_save=False)
+                                           deep_inspect=False, auto_save=False)
                 elif choice == "5":
                     args = build_scan_args([target], mode="quick", ipv6=True,
-                                           vuln_check=False, auto_save=False)
+                                           vuln_check=False, deep_inspect=False,
+                                           auto_save=False)
                 elif choice == "6":
                     extra = input(f"{Colors.CYAN}Extra Nmap arguments: {Colors.RESET}").strip()
                     args = build_scan_args([target], mode="custom", nmap_args=extra,
-                                           vuln_check=False, auto_save=False)
+                                           vuln_check=False, deep_inspect=False,
+                                           auto_save=False)
                 if confirm("Save a report automatically after the scan?"):
                     args.auto_save = True
                     args.format = choose_option(
@@ -517,11 +522,11 @@ infrastructure engineering.
                 args = None
                 if choice == "1":
                     args = build_scan_args([target], mode="quick", vuln_check=True,
-                                           threads=10, auto_save=False,
+                                           threads=12, deep_inspect=False, auto_save=False,
                                            vuln_source=vuln_source)
                 elif choice == "2":
                     args = build_scan_args([target], mode="common", vuln_check=True,
-                                           threads=10, auto_save=False,
+                                           threads=10, deep_inspect=False, auto_save=False,
                                            vuln_source=vuln_source)
                 elif choice == "3":
                     nvd = None
@@ -540,7 +545,7 @@ infrastructure engineering.
                 elif choice == "5":
                     extra = input(f"{Colors.CYAN}Additional Nmap args (or Enter): {Colors.RESET}").strip()
                     args = build_scan_args([target], mode="common", vuln_check=True,
-                                           nmap_args=extra, auto_save=False,
+                                           nmap_args=extra, deep_inspect=False, auto_save=False,
                                            vuln_source=vuln_source)
                 elif choice == "6":
                     mode = input(f"{Colors.CYAN}Mode (quick/common/full) [quick]: {Colors.RESET}").strip().lower() or "quick"

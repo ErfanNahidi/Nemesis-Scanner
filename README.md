@@ -1,4 +1,4 @@
-# Nemesis Scanner v4.0.0
+# Nemesis Scanner v4.1.0
 
 [فارسی](README_FA.md) · [Full Manual](MANUAL.md)
 
@@ -6,7 +6,7 @@ Nemesis Scanner is a Python command-line interface around Nmap. It can scan expl
 
 > Use only on systems and networks that you own or are explicitly authorized to assess. Scanning can disrupt services and may require elevated privileges.
 
-## What’s in v4
+## What’s in v4.1
 
 - Compact, red Nemesis-branded interactive menus with a persistent ASCII logo.
 - Network scan presets: Quick, Full, Turbo, Stealth, IPv6, and Custom.

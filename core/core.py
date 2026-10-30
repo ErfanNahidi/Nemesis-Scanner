@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-# core.py – Nemesis Scanner v4.0.0
+# core.py – Nemesis Scanner v4.1.0
 # Author: Erfan Nahidi
 # Use only on systems you own or have explicit written permission to test.
 # =============================================================================
@@ -25,7 +25,7 @@ from .vulnerability import (
 # ---------------------------------------------------------------------------
 # Constants & Configuration
 # ---------------------------------------------------------------------------
-VERSION = "4.0.0"
+VERSION = "4.1.0"
 
 EXPLOITDB_SEARCH = "https://www.exploit-db.com/search?cve="
 
@@ -284,6 +284,8 @@ class NemesisScanner:
         self.scan_data = None
         self.os_info = "Unknown"
         self._target_ip = None  # will be resolved
+        self._deep_check_cache = {}
+        self._cve_cache = {}
 
     def _resolve_target(self) -> str:
         """Resolve target to IP; for IPv6 we rely on nmap -6."""
@@ -443,7 +445,21 @@ class NemesisScanner:
             service.get("version", ""),
         )
 
+    def _service_cache_key(self, service: Dict) -> tuple:
+        return (
+            service.get("proto"),
+            service.get("port"),
+            service.get("name", ""),
+            service.get("product", ""),
+            service.get("version", ""),
+            self.vuln_source,
+        )
+
     async def _correlate_cves(self, service: Dict) -> List[Dict]:
+        cache_key = self._service_cache_key(service)
+        if cache_key in self._cve_cache:
+            return self._cve_cache[cache_key]
+
         cves = []
         # Static vulns first
         static_vulns = self.get_static_vulns(service)
@@ -501,23 +517,36 @@ class NemesisScanner:
                     "exploitdb_url": "",
                     "exploits": [],
                 })
+
+        self._cve_cache[cache_key] = cves
         return cves
 
+    async def _correlate_service(self, service: Dict):
+        key = f"{service['proto']}/{service['port']} {service['name']} {service['product']} {service['version']}".strip()
+        vulns = await self._correlate_cves(service)
+
+        if self.deep_inspect and self._target_ip:
+            deep_check_key = self._service_cache_key(service)
+            if deep_check_key not in self._deep_check_cache:
+                self._deep_check_cache[deep_check_key] = run_deep_checks(self._target_ip, service)
+            deep_vulns = self._deep_check_cache[deep_check_key]
+            if deep_vulns:
+                for dv in deep_vulns:
+                    if not any(v.get("description") == dv["description"] for v in vulns):
+                        dv.setdefault("exploits", [])
+                        dv.setdefault("exploitdb_url", "")
+                        vulns.append(dv)
+        return key, vulns
+
     async def correlate_vulns(self, services: List[Dict]) -> Dict[str, List[Dict]]:
+        if not services:
+            return {}
+
+        tasks = [self._correlate_service(svc) for svc in services]
+        results = await asyncio.gather(*tasks)
+
         vuln_map = {}
-        for svc in services:
-            key = f"{svc['proto']}/{svc['port']} {svc['name']} {svc['product']} {svc['version']}".strip()
-            vulns = await self._correlate_cves(svc)
-            # Deep inspection active checks
-            if self.deep_inspect and self._target_ip:
-                deep_vulns = run_deep_checks(self._target_ip, svc)
-                if deep_vulns:
-                    for dv in deep_vulns:
-                        # Avoid duplicates
-                        if not any(v.get("description") == dv["description"] for v in vulns):
-                            dv.setdefault("exploits", [])
-                            dv.setdefault("exploitdb_url", "")
-                            vulns.append(dv)
+        for key, vulns in results:
             if vulns:
                 vuln_map[key] = vulns
         return vuln_map

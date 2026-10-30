@@ -1,4 +1,4 @@
-# Nemesis Scanner v4.0.0 — Full Manual
+# Nemesis Scanner v4.1.0 — Full Manual
 
 [English README](README.md) · [راهنمای فارسی](README_FA.md)
 
