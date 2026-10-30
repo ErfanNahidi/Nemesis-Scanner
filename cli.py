@@ -430,10 +430,10 @@ infrastructure engineering.
 
         while True:
             render_menu("Vulnerability Assessment", [
-                ("1", "Review a previous result", "offline or online CVE review by IP"),
-                ("2", "Start a new vulnerability scan", "choose Fast, Medium, Deep or Custom"),
+                ("1", "Review saved report", "by device IP"),
+                ("2", "New vulnerability scan", "scan a target"),
                 ("0", "Back", "return to main menu"),
-            ], hint="Reviewing a saved result does not start a network scan.")
+            ])
             choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             if choice == "0":
                 return
@@ -455,14 +455,14 @@ infrastructure engineering.
     def vuln_scan_menu():
         while True:
             render_menu("Vulnerability Scan Presets", [
-                ("1", "Quick", "essential ports, shorter wait"),
-                ("2", "Medium", "top 1000 ports, balanced wait"),
-                ("3", "Deep", "thorough checks; may take much longer"),
-                ("4", "Web checks", "HTTP headers and TLS inspection"),
-                ("5", "Directory services", "focused service checks"),
-                ("6", "Custom", "choose scan mode and options"),
+                ("1", "Quick", "~38 TCP + common UDP ports; vuln scripts; shortest wait"),
+                ("2", "Medium", "Top 1,000 TCP + common UDP ports; vuln scripts"),
+                ("3", "Deep", "Same ports as Medium; deeper checks; optional online CVEs"),
+                ("4", "Web checks", "Quick ports; HTTP headers and TLS; no vuln scripts"),
+                ("5", "Directory services", "Top 1,000 ports; add directory-focused Nmap args"),
+                ("6", "Custom", "Choose port range, vuln scripts, and inspection"),
                 ("0", "Back", "return to previous menu"),
-            ], hint="Select a preset. The next step asks for the target and CVE source.")
+            ], hint="Offline uses local data; Online queries NVD. Deep checks can take longer.")
             choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             if choice in ("1","2","3","4","5","6"):
                 target = input(f"{Colors.CYAN}Target (IP or hostname): {Colors.RESET}").strip()

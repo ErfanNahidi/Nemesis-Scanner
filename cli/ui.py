@@ -80,7 +80,11 @@ def render_menu(
             key_color = Colors.RED
         else:
             key_color = Colors.CYAN
-        print(f"  {key_color}{Colors.BOLD}[{key}]{Colors.RESET} {Colors.YELLOW}{label}{Colors.RESET}")
+        print(
+            f"  {key_color}{Colors.BOLD}[{key}]{Colors.RESET} "
+            f"{Colors.YELLOW}{label}{Colors.RESET}"
+            f"{Colors.MUTED} - {description}{Colors.RESET}"
+        )
     if hint:
         print(f"{Colors.MUTED}{hint}{Colors.RESET}")
 
