@@ -1,58 +1,32 @@
 #!/usr/bin/env python3
 # =============================================================================
-# core.py – Nemesis Scanner | Shadow Edition v2.2.0 (Monster Update)
+# core.py – Nemesis Scanner v4.0.0
 # Author: Erfan Nahidi
 # Use only on systems you own or have explicit written permission to test.
 # =============================================================================
 
-import sys
-import os
-import json
-import csv
 import logging
 import asyncio
 import concurrent.futures
-import time
-import random
 import socket
-import struct
 import ssl
-import smtplib
-from email.message import EmailMessage
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Dict, List, Optional, Any
 from collections import defaultdict
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
 
 import nmap                     # python-nmap
-import requests                 # for APIs
-from colorama import Fore, Style, init
+from .vulnerability import (
+    lookup_local_vulnerabilities,
+    lookup_nvd_vulnerabilities,
+    search_exploits_vulners,
+)
 
-# Optional imports
-try:
-    import yaml
-    HAS_YAML = True
-except ImportError:
-    HAS_YAML = False
-
-try:
-    from jinja2 import Template
-    HAS_JINJA = True
-except ImportError:
-    HAS_JINJA = False
-
-# Initialize colorama
-init(autoreset=True)
 
 # ---------------------------------------------------------------------------
 # Constants & Configuration
 # ---------------------------------------------------------------------------
-VERSION = "3.0.0"
+VERSION = "4.0.0"
 
-# API endpoints
-NVD_API_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-VULNERS_API = "https://vulners.com/api/v3/search/lucene/"
 EXPLOITDB_SEARCH = "https://www.exploit-db.com/search?cve="
 
 # Attack Surface Modules (service-based, OS-agnostic)
@@ -91,164 +65,6 @@ TURBO_UDP = [53,161,162,67,68,123]
 # ---------------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("NemesisScanner")
-
-# ---------------------------------------------------------------------------
-# Static Vulnerability DB loader (with external file support)
-# ---------------------------------------------------------------------------
-def _default_static_vulns() -> dict:
-    return {
-        ("smb", "1.0"): ["MS17-010 (EternalBlue) – RCE via SMBv1"],
-        ("smb", "3.1.1"): ["CVE-2020-0796 (SMBGhost) – RCE"],
-        ("smb", "2.0"): ["CVE-2017-0144 (EternalChampion/EternalSynergy)"],
-        ("rdp", ""): ["CVE-2019-0708 (BlueKeep) – RCE", "CVE-2020-0610 – RCE"],
-        ("dns", ""): ["CVE-2020-1350 (SigRed) – RCE"],
-        ("snmp", ""): ["Default community strings – info disclosure"],
-        ("winrm", ""): ["CVE-2015-0010 – auth bypass (older versions)"],
-        ("mssql", ""): ["CVE-2020-0618 – RCE (Reporting Services)", "CVE-2019-1068 – SQL Server RCE"],
-        ("http", "apache"): ["CVE-2021-41773 (Path Traversal/RCE in Apache 2.4.49)"],
-        ("http", "iis"): ["CVE-2017-7269 (IIS 6.0 RCE)", "CVE-2015-1635 (HTTP.sys RCE)"],
-    }
-
-def load_static_vulns() -> dict:
-    """Load static vulnerability DB from external JSON file if exists, else fallback."""
-    json_path = Path(__file__).parent / "static_vulns.json"
-    if json_path.is_file():
-        try:
-            with open(json_path, "r") as f:
-                data = json.load(f)
-                # convert keys from string to tuple
-                result = {}
-                for k, v in data.items():
-                    # expect key like "smb,1.0"
-                    parts = k.split(",", 1)
-                    if len(parts) == 2:
-                        result[(parts[0], parts[1])] = v
-                if result:
-                    return result
-        except Exception as e:
-            logger.warning(f"Failed to load static_vulns.json, using built-in DB: {e}")
-    return _default_static_vulns()
-
-STATIC_VULNS = load_static_vulns()
-
-# ---------------------------------------------------------------------------
-# Simple cache for API responses
-# ---------------------------------------------------------------------------
-class SimpleCache:
-    def __init__(self, ttl_seconds: int = 3600):
-        self.cache = {}
-        self.ttl = ttl_seconds
-
-    def get(self, key: str) -> Optional[Any]:
-        if key in self.cache:
-            entry = self.cache[key]
-            if datetime.now() - entry["time"] < timedelta(seconds=self.ttl):
-                return entry["data"]
-            else:
-                del self.cache[key]
-        return None
-
-    def set(self, key: str, data: Any):
-        self.cache[key] = {"data": data, "time": datetime.now()}
-
-# Global caches
-nvd_cache = SimpleCache(ttl_seconds=3600)   # 1h
-vulners_cache = SimpleCache(ttl_seconds=1800)  # 30 min
-
-# ---------------------------------------------------------------------------
-# API Helpers (with caching, CVSS scoring, exploit maturity)
-# ---------------------------------------------------------------------------
-def lookup_cves_nvd(service: str, product: str, version: str, api_key: str = None) -> List[Dict]:
-    """Query NVD for CVEs and enrich with CVSS score, severity, exploit flag."""
-    query_parts = []
-    if product: query_parts.append(product)
-    if version: query_parts.append(version)
-    if service and service not in query_parts: query_parts.append(service)
-    if not query_parts: return []
-    keyword = " ".join(query_parts)
-    cache_key = f"nvd:{keyword}"
-    cached = nvd_cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    headers = {}
-    if api_key: headers["apiKey"] = api_key
-    params = {"keywordSearch": keyword, "resultsPerPage": 10}
-    try:
-        resp = requests.get(NVD_API_BASE, headers=headers, params=params, timeout=15)
-        if resp.status_code == 200:
-            data = resp.json()
-            cves = []
-            for vuln in data.get("vulnerabilities", []):
-                cve_id = vuln["cve"]["id"]
-                desc = (vuln["cve"]["descriptions"][0]["value"][:200]) if vuln["cve"].get("descriptions") else ""
-                # CVSS info
-                metrics = vuln.get("cve", {}).get("metrics", {})
-                cvss_score = None
-                severity = "UNKNOWN"
-                # Try CVSS v3 first, then v2
-                for key, method in [("cvssMetricV31", "cvssData"), ("cvssMetricV30", "cvssData"), ("cvssMetricV2", "cvssData")]:
-                    if key in metrics:
-                        for entry in metrics[key]:
-                            if method in entry:
-                                cvss = entry[method]
-                                cvss_score = cvss.get("baseScore")
-                                severity = cvss.get("baseSeverity", "UNKNOWN").upper()
-                                break
-                        if cvss_score is not None:
-                            break
-                # Exploit maturity (rough check: if "exploit" appears in references)
-                exploit_available = False
-                for ref in vuln.get("cve", {}).get("references", []):
-                    if "exploit" in ref.get("url", "").lower() or "exploit" in " ".join(ref.get("tags", [])).lower():
-                        exploit_available = True
-                        break
-                cves.append({
-                    "cve": cve_id,
-                    "description": desc,
-                    "cvss_score": cvss_score,
-                    "severity": severity,
-                    "exploit_available": exploit_available,
-                    "exploitdb_url": get_exploitdb_links(cve_id),
-                })
-            nvd_cache.set(cache_key, cves)
-            return cves
-        elif resp.status_code == 403 or resp.status_code == 429:
-            logger.warning(f"NVD API rate limited (HTTP {resp.status_code}). Using cached or empty.")
-        else:
-            logger.warning(f"NVD API status {resp.status_code}")
-    except Exception as e:
-        logger.error(f"NVD lookup error: {e}")
-    return []
-
-def search_exploits_vulners(query: str, api_key: str = None) -> List[Dict]:
-    """Search Vulners API for exploits, with caching."""
-    if not api_key:
-        return []
-    cache_key = f"vulners:{query}"
-    cached = vulners_cache.get(cache_key)
-    if cached is not None:
-        return cached
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "query": f"cve:{query} OR {query}",
-        "type": "exploit",
-        "apiKey": api_key,
-        "size": 5
-    }
-    try:
-        resp = requests.post(VULNERS_API, headers=headers, json=payload, timeout=10)
-        if resp.status_code == 200:
-            result = resp.json().get("data", {}).get("search", [])
-            vulners_cache.set(cache_key, result)
-            return result
-        elif resp.status_code in (403, 429):
-            logger.warning(f"Vulners rate limited (HTTP {resp.status_code}).")
-        else:
-            logger.warning(f"Vulners API error: {resp.status_code}")
-    except Exception as e:
-        logger.error(f"Vulners lookup error: {e}")
-    return []
 
 def get_exploitdb_links(cve_id: str) -> str:
     """Return a search URL for Exploit-DB."""
@@ -408,7 +224,7 @@ def run_deep_checks(target_ip: str, service: Dict) -> List[Dict]:
     return vulns
 
 # ---------------------------------------------------------------------------
-# Core Scanner Class – Cross-Platform, Ultra-Fast, Monster Edition
+# Core Scanner Class – Cross-Platform
 # ---------------------------------------------------------------------------
 class NemesisScanner:
     """Nemesis Scanner – deep service & vulnerability discovery for any OS."""
@@ -434,11 +250,15 @@ class NemesisScanner:
         deep_inspect: bool = True,   # new: enable active deep checks
         skip_ping: bool = False,     # new: if True, do not add -Pn
         ipv6: bool = False,          # new: scan over IPv6
+        vuln_source: str = "offline",
     ):
         self.target = target
         self.threads = threads
         self.stealth = stealth
         self.vuln_check = vuln_check
+        if vuln_source not in {"offline", "online"}:
+            raise ValueError("vuln_source must be 'offline' or 'online'")
+        self.vuln_source = vuln_source
         self.nmap_extra = nmap_args_extra
         self.nvd_api_key = nvd_api_key
         self.vulners_api_key = vulners_api_key
@@ -617,32 +437,11 @@ class NemesisScanner:
         return services
 
     def get_static_vulns(self, service: Dict) -> List[Dict]:
-        """Return static vulns as structured dicts with severity guess."""
-        name = service["name"].lower()
-        product = service.get("product", "").lower()
-        version = service.get("version", "").lower()
-        found = []
-        for (svc_pat, ver_pat), vulns_list in STATIC_VULNS.items():
-            if svc_pat in name or (product and svc_pat in product):
-                if ver_pat == "" or (version and ver_pat in version):
-                    for desc in vulns_list:
-                        cve_match = __import__('re').search(r'(CVE-\d{4}-\d{4,})', desc)
-                        cve_id = cve_match.group(1) if cve_match else ""
-                        # guess severity based on keywords
-                        severity = "HIGH"
-                        if "rce" in desc.lower() or "remote code" in desc.lower():
-                            severity = "CRITICAL"
-                        elif "dos" in desc.lower():
-                            severity = "MEDIUM"
-                        found.append({
-                            "cve": cve_id,
-                            "description": desc,
-                            "cvss_score": None,
-                            "severity": severity,
-                            "exploit_available": "exploit" in desc.lower(),
-                            "exploitdb_url": get_exploitdb_links(cve_id),
-                        })
-        return found
+        return lookup_local_vulnerabilities(
+            service["name"],
+            service.get("product", ""),
+            service.get("version", ""),
+        )
 
     async def _correlate_cves(self, service: Dict) -> List[Dict]:
         cves = []
@@ -655,11 +454,12 @@ class NemesisScanner:
             loop = asyncio.get_running_loop()
             live_cves = await loop.run_in_executor(
                 None,
-                lookup_cves_nvd,
+                lookup_nvd_vulnerabilities,
                 service["name"],
                 service.get("product", ""),
                 service.get("version", ""),
                 self.nvd_api_key,
+                self.vuln_source == "online",
             )
             for lcve in live_cves:
                 if not any(c["cve"] == lcve["cve"] for c in cves if c["cve"]):
@@ -667,7 +467,11 @@ class NemesisScanner:
 
         # Enrich with Vulners exploits
         for cve_entry in cves:
-            if cve_entry.get("cve") and self.vulners_api_key:
+            if (
+                self.vuln_source == "online"
+                and cve_entry.get("cve")
+                and self.vulners_api_key
+            ):
                 exploits = await asyncio.get_running_loop().run_in_executor(
                     None,
                     search_exploits_vulners,
@@ -747,197 +551,3 @@ class NemesisScanner:
             "raw_services": services,
         }
 
-# ---------------------------------------------------------------------------
-# Reporter – Multi-format output (enhanced with severity colors)
-# ---------------------------------------------------------------------------
-class Reporter:
-    @staticmethod
-    def console_report(data: dict, verbose: bool = False):
-        print(Fore.CYAN + "="*70)
-        print(Fore.YELLOW + f"  Scan Report for {data['target']}")
-        print(Fore.YELLOW + f"  OS: {data.get('os', 'Unknown')} | Time: {data['timestamp']}")
-        print(Fore.CYAN + "="*70 + Style.RESET_ALL)
-
-        print(Fore.GREEN + "\n[Services]")
-        for s in data["services"]:
-            print(f"  {s}")
-        if not data["services"]:
-            print("  No open services found.")
-
-        print(Fore.GREEN + "\n[Module Classification]")
-        if data["modules"]:
-            for mod, svcs in data["modules"].items():
-                if svcs:
-                    print(Fore.MAGENTA + f"  {mod}:")
-                    for s in svcs:
-                        print(f"    - {s}")
-        else:
-            print("  No modules matched.")
-
-        if data.get("vulnerabilities"):
-            print(Fore.RED + "\n[Vulnerabilities & Exploits]")
-            # Sort by severity: critical first
-            severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "UNKNOWN": 4}
-            for svc, vulns in data["vulnerabilities"].items():
-                vulns_sorted = sorted(vulns, key=lambda x: severity_order.get(x.get("severity", "UNKNOWN"), 4))
-                print(f"  {svc}:")
-                for v in vulns_sorted:
-                    sev = v.get("severity", "UNKNOWN")
-                    color = Fore.RED if sev == "CRITICAL" else Fore.LIGHTRED_EX if sev == "HIGH" else Fore.YELLOW if sev == "MEDIUM" else Fore.BLUE
-                    print(color + f"    [{sev}] {v.get('description', '')}")
-                    if v.get("cve"):
-                        print(Fore.YELLOW + f"        CVE: {v['cve']} (CVSS: {v.get('cvss_score','N/A')})  | Exploit-DB: {v.get('exploitdb_url','')}")
-                    for exp in v.get("exploits", []):
-                        print(Fore.MAGENTA + f"        Exploit: {exp['title']} ({exp['url']})")
-
-    @staticmethod
-    def json_report(data: dict, output_path: str):
-        with open(output_path, "w") as f:
-            json.dump(data, f, indent=2, default=str)
-        logger.info(f"JSON report saved to {output_path}")
-
-    @staticmethod
-    def csv_report(data: dict, output_path: str):
-        with open(output_path, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["Proto/Port", "Service", "Product", "Version", "CVE", "Severity", "CVSS", "Description", "Exploit Links"])
-            for svc in data.get("raw_services", []):
-                key = f"{svc['proto']}/{svc['port']} {svc['name']} {svc.get('product','')} {svc.get('version','')}".strip()
-                vulns = data.get("vulnerabilities", {}).get(key, [])
-                if not vulns:
-                    writer.writerow([
-                        f"{svc['proto']}/{svc['port']}",
-                        svc["name"],
-                        svc.get("product", ""),
-                        svc.get("version", ""),
-                        "", "", "", "", ""
-                    ])
-                else:
-                    for v in vulns:
-                        exploit_links = "; ".join([e["url"] for e in v.get("exploits", [])])
-                        writer.writerow([
-                            f"{svc['proto']}/{svc['port']}",
-                            svc["name"],
-                            svc.get("product", ""),
-                            svc.get("version", ""),
-                            v.get("cve", ""),
-                            v.get("severity", ""),
-                            v.get("cvss_score", ""),
-                            v.get("description", ""),
-                            exploit_links
-                        ])
-        logger.info(f"CSV report saved to {output_path}")
-
-    @staticmethod
-    def html_report(data: dict, output_path: str):
-        if not HAS_JINJA:
-            logger.warning("Jinja2 not installed, skipping HTML report.")
-            return
-        template_str = """<!DOCTYPE html>
-<html><head><title>Scan Report {{ target }}</title>
-<style>body{font-family:Arial;margin:20px;}table{border-collapse:collapse;width:100%;}
-th,td{border:1px solid #ddd;padding:8px;}th{background:#4CAF50;color:white;}
-.vuln{color:red;}.exploit{color:darkorange;}
-.critical{background:#ffcccc;} .high{background:#ffe6e6;} .medium{background:#fff3cd;} .low{background:#e2f0d9;}
-</style></head><body>
-<h1>Scan Report: {{ target }}</h1>
-<p>OS: {{ os }} | Time: {{ timestamp }}</p>
-<h2>Open Services</h2>
-<table><tr><th>Proto/Port</th><th>Service</th><th>Product</th><th>Version</th><th>Vulnerabilities</th></tr>
-{% for s in raw_services %}
-{% set key = (s.proto~'/'~s.port~' '~s.name~' '~(s.product or '')~' '~(s.version or '')).strip() %}
-{% set vlist = vuln_map.get(key, []) %}
-{% if vlist %}
-  {% for v in vlist %}
-  {% set sev = v.severity|lower %}
-  <tr class="{{ sev }}">
-    <td>{{ s.proto }}/{{ s.port }}</td>
-    <td>{{ s.name }}</td>
-    <td>{{ s.product or '' }}</td>
-    <td>{{ s.version or '' }}</td>
-    <td class="vuln">
-      [{{ v.severity }}] {{ v.description }} ({{ v.cve }} CVSS:{{ v.cvss_score }})
-      <br><span class="exploit">Exploit-DB: <a href="{{ v.exploitdb_url }}">{{ v.exploitdb_url }}</a></span>
-      {% for e in v.exploits %}
-        <br><a href="{{ e.url }}">{{ e.title }}</a>
-      {% endfor %}
-    </td>
-  </tr>
-  {% endfor %}
-{% else %}
-  <tr>
-    <td>{{ s.proto }}/{{ s.port }}</td>
-    <td>{{ s.name }}</td>
-    <td>{{ s.product or '' }}</td>
-    <td>{{ s.version or '' }}</td>
-    <td></td>
-  </tr>
-{% endif %}
-{% endfor %}
-</table>
-<h2>Attack Surface Modules</h2>
-{% for mod, svcs in modules.items() %}{% if svcs %}
-<h3>{{ mod }}</h3><ul>{% for s in svcs %}<li>{{ s }}</li>{% endfor %}</ul>
-{% endif %}{% endfor %}
-</body></html>"""
-        rendered = Template(template_str).render(
-            target=data["target"],
-            os=data.get("os", ""),
-            timestamp=data["timestamp"],
-            raw_services=data.get("raw_services", []),
-            modules=data.get("modules", {}),
-            vuln_map=data.get("vulnerabilities", {})
-        )
-        with open(output_path, "w") as f:
-            f.write(rendered)
-        logger.info(f"HTML report saved to {output_path}")
-
-    @staticmethod
-    def send_email(data: dict, smtp_config: dict):
-        try:
-            msg = EmailMessage()
-            msg["Subject"] = f"⚡ Scan Report for {data['target']} – {sum(len(v) for v in data.get('vulnerabilities',{}).values())} vulns found"
-            msg["From"] = smtp_config["from"]
-            msg["To"] = smtp_config["to"]
-            body = f"OS: {data.get('os')}\n\nServices:\n"
-            body += "\n".join(data["services"])
-            if data.get("vulnerabilities"):
-                body += "\n\nCRITICAL VULNERABILITIES:\n"
-                for svc, vulns in data["vulnerabilities"].items():
-                    body += f"\n{svc}:\n"
-                    for v in vulns:
-                        body += f"  - [{v.get('severity','')}] {v['description']} ({v.get('cve','')})\n"
-            msg.set_content(body)
-            context = ssl.create_default_context()
-            with smtplib.SMTP(smtp_config["server"], smtp_config["port"]) as s:
-                s.ehlo()
-                s.starttls(context=context)
-                s.login(smtp_config["user"], smtp_config["password"])
-                s.send_message(msg)
-            logger.info("Email sent successfully.")
-        except Exception as e:
-            logger.error(f"Email failed: {e}")
-
-    @staticmethod
-    def slack_webhook(data: dict, webhook_url: str):
-        blocks = [
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*⚡ Scan Report for {data['target']}*\nOS: {data.get('os')}"}},
-            {"type": "divider"},
-            {"type": "section", "text": {"type": "mrkdwn", "text": "Services:\n" + "\n".join(f"• {s}" for s in data["services"])}}
-        ]
-        if data.get("vulnerabilities"):
-            vuln_text = "⚠️ *Vulnerabilities:*\n"
-            for svc, vulns in list(data["vulnerabilities"].items())[:5]:
-                vuln_text += f"\n*{svc}*:\n"
-                for v in vulns[:2]:
-                    vuln_text += f"  - [{v.get('severity','')}] {v['description']} ({v.get('cve','')})\n"
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": vuln_text}})
-        payload = {"text": f"Scan complete: {data['target']}", "blocks": blocks}
-        try:
-            r = requests.post(webhook_url, json=payload, timeout=10)
-            if r.status_code == 200:
-                logger.info("Slack notification sent.")
-            else:
-                logger.warning(f"Slack webhook failed: {r.status_code}")
-        except Exception as e:
-            logger.error(f"Slack error: {e}")

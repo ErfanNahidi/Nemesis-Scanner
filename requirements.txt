@@ -1,6 +1,5 @@
 python-nmap
 requests
-tqdm
 colorama
-pyyaml
+# Optional: required only for HTML report generation
 jinja2

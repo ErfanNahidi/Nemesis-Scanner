@@ -1,476 +1,300 @@
-# Nemesis Scanner – Monster Edition v3.0.0 | Manual
+# Nemesis Scanner v4.0.0 — Full Manual
 
-**Full documentation and usage guide**  
-*Author: Erfan Nahidi*
+[English README](README.md) · [راهنمای فارسی](README_FA.md)
 
----
+## 1. Overview
 
-## Table of Contents
+Nemesis Scanner is a Python command-line interface around Nmap. It supports authorized network scans, service and version discovery, local vulnerability-signature matching, optional online NVD lookup, selected active service checks, and reports.
 
-1. [Introduction](#1-introduction)
-2. [Installation](#2-installation)
-3. [Basic Usage](#3-basic-usage)
-4. [Scan Modes Explained](#4-scan-modes-explained)
-5. [Command‑Line Reference](#5-commandline-reference)
-6. [Interactive Menu Guide](#6-interactive-menu-guide)
-7. [Output & Reporting](#7-output--reporting)
-8. [Auto‑Save Feature](#8-autosave-feature)
-9. [Attack Surface Modules](#9-attack-surface-modules)
-10. [Vulnerability Detection Pipeline](#10-vulnerability-detection-pipeline)
-11. [Deep Inspection](#11-deep-inspection)
-12. [Evasion & Advanced Options](#12-evasion--advanced-options)
-13. [Configuration File](#13-configuration-file)
-14. [API Keys Setup](#14-api-keys-setup)
-15. [Troubleshooting](#15-troubleshooting)
-16. [Legal Disclaimer](#16-legal-disclaimer)
+The application has two distinct uses:
 
----
+- **Scan a target:** starts Nmap and creates a new result.
+- **Review a saved result:** reads the latest JSON report for an IP and reviews it without starting Nmap.
 
-## 1. Introduction
-
-**Nemesis Scanner** is an advanced, cross‑platform network reconnaissance and vulnerability assessment tool built on top of **Nmap**. It combines the speed and reliability of Nmap with additional layers:
-
-- **Service & version detection**
-- **OS fingerprinting**
-- **Attack surface mapping** – open ports are automatically linked to known attack modules (SMB, AD, RDP, etc.)
-- **Static vulnerability database** – built‑in signatures for well‑known CVEs (expandable via JSON)
-- **Live CVE lookup** via NIST NVD and **exploit search** via Vulners
-- **Deep active inspection** – checks for anonymous FTP, missing HTTP headers, weak TLS, and more
-- **Caching** – minimises repeated API calls to avoid rate limits
-- **Severity & CVSS scores** – vulnerabilities are coloured and scored (Critical/High/Medium/Low)
-- **Multi‑format reporting** – console, JSON, CSV, HTML
-- **Turbo mode** – ultra‑fast scanning of only critical ports
-- **Interactive menus** – separated workflows for network discovery, vulnerability assessment, and full attack surface analysis.
-
-The tool is designed for **penetration testers**, **red teams**, and **security auditors** who need a single portable scanner that works on **Windows, Linux, macOS, and embedded devices**.
-
----
+Only scan systems covered by explicit authorization. Agree on the target scope, testing window, rate, and notification plan with the owner. Reports can include sensitive network and software-version data.
 
 ## 2. Installation
 
 ### 2.1 Prerequisites
 
-- **Operating System:** Any system that can run Nmap and Python 3.8+
-- **Nmap** version 7.80 or newer installed and in the system `PATH`
-- **Python** 3.8 or newer
-- **pip** (Python package manager)
+- Python 3.8 or newer.
+- Nmap 7.80 or newer available on `PATH`.
+- Dependencies listed in `requirements.txt`.
+- Internet access for online NVD/Vulners lookup and Git updates.
+
+Some Nmap scan types and OS detection require elevated privileges. Run with the least privilege required by the selected scan and local policy.
 
 ### 2.2 Install Nmap
 
-| Platform | Command |
-|----------|---------|
-| Debian/Ubuntu/Kali | `sudo apt update && sudo apt install nmap -y` |
-| macOS (Homebrew)   | `brew install nmap` |
-| Windows            | Download installer from [nmap.org](https://nmap.org/download.html) |
-
-### 2.3 Install Python dependencies
-
-Create a `requirements.txt` file (if not already present) with:
-
-```
-
-python-nmap
-requests
-colorama
-pyyaml
-jinja2
-
-```
-
-Then run:
+Debian/Ubuntu:
 
 ```bash
-pip install -r requirements.txt
+sudo apt update
+sudo apt install nmap
 ```
 
-Alternatively, install each package manually:
+macOS:
 
 ```bash
-pip install python-nmap requests colorama pyyaml jinja2
+brew install nmap
 ```
 
-2.4 Download the Scanner
+Windows: install Nmap from [nmap.org](https://nmap.org/download.html) and add it to `PATH`.
 
-Clone the repository or simply copy core.py and cli.py into a working directory.
+### 2.3 Install Python requirements
+
+From the project directory:
 
 ```bash
-git clone https://github.com/ErfanNahidi/Nemesis-Scanner.git
-cd Nemesis-Scanner
+python -m pip install -r requirements.txt
 ```
 
-2.5 API Keys (Optional but Recommended)
+The required runtime packages are `python-nmap`, `requests`, and `colorama`. `Jinja2` is optional and enables HTML reports; without it, JSON and CSV reports are still available.
 
-· NVD API key – increases the rate limit from 5 requests per 30 seconds to 50. Request one at https://nvd.nist.gov/developers/request-an-api-key.
-· Vulners API key – free registration at https://vulners.com, needed for exploit search.
+### 2.4 Optional API keys
 
-Store the keys in a configuration file or pass them directly as command‑line arguments.
+- **NVD:** request a key from [NVD](https://nvd.nist.gov/developers/request-an-api-key). It may improve rate limits for Online queries.
+- **Vulners:** optional key from [Vulners](https://vulners.com); used only for exploit enrichment in supported flows.
 
----
+Do not put secrets in public repositories, screenshots, or shared reports.
 
-3. Basic Usage
+## 3. Launching the CLI
 
-All scans require root privileges (sudo on Linux/macOS) for SYN scan, UDP scan, and OS detection.
-
-Command‑line (direct):
+Interactive mode:
 
 ```bash
-sudo python3 cli.py <target> [options]
+python cli.py
 ```
 
-Interactive menu:
+Direct mode:
 
 ```bash
-sudo python3 cli.py
+python cli.py 192.0.2.10 -m quick
 ```
 
-If run without arguments, the interactive menu opens automatically. Use --interactive to force it even when arguments are supplied.
+`192.0.2.10` is reserved for documentation. Replace it only with an authorized target.
 
----
-
-4. Scan Modes Explained
-
-Mode TCP Ports UDP Ports Version Detection OS Detection NSE Scripts (if vuln-check) Speed
-quick ~38 commonly attacked ports 10 common UDP ports Optional No Yes (if enabled) Fast
-common Top 1000 TCP ports 20 common UDP ports Always Yes Yes (if enabled) Medium
-full All 65535 TCP ports 20 common UDP ports Always Yes Yes (if enabled) Very Slow
-custom Defined by --nmap-args As per args As per args As per args Yes (if enabled) Varies
-turbo Top 15 critical ports 6 critical UDP ports Optional No Yes (if enabled) Ultra‑Fast
-
-Turbo Mode Details
-
-Turbo mode is optimised for sheer speed:
-
-· T5 timing, 10 000 packets per second minimum rate
-· No ping (-Pn), no DNS resolution, no retries
-· Parallelism up to 256 probes
-· RTT timeout of 100 ms, host timeout of 30 seconds
-· Only 15 TCP ports (21,22,80,443,445,135,139,3389,5985,5986,8080,8443,1433,3306,5900) and 6 UDP ports (53,161,162,67,68,123)
-· If --vuln-check is added, a lightweight version scan (-sV --version-intensity 2) is included, keeping scans under 30 seconds for a single host.
-
----
-
-5. Command‑Line Reference
-
-```
-usage: cli.py [targets] [options]
-
-Positional arguments:
-  targets               IP address(es), hostname(s) or CIDR notation
-
-Optional arguments:
-  -m, --mode            Scan mode: quick|common|full|custom|turbo (default: quick)
-  --stealth             Stealth mode (T2, delays, decoys)
-  --vuln-check          Enable vulnerability detection (NSE scripts + NVD lookup)
-  --nvd-key KEY         NVD API key for higher rate limit
-  --vulners-key KEY     Vulners API key for exploit search
-  --nmap-args ARGS      Additional Nmap arguments (used with custom mode)
-  -t, --threads N       Number of parallel target scans (default: 10, capped at 2 in stealth)
-  -o, --output NAME     Base name for report files (without extension)
-  --format              Output format: json|csv|html|all (default: json)
-  --verbose             Show detailed console output
-  --aggressive          Aggressive timing (T5, 2000 pps)
-  --turbo               Enable turbo mode
-  --fragment            Fragment IP packets (-f)
-  --source-port PORT    Spoof source port
-  --spoof-mac MAC       Spoof MAC address
-  --decoys IP1,IP2,...  Comma‑separated decoy IPs
-  --ttl VALUE           Set TTL for packets
-  --auth-check          Attempt basic authentication checks (future expansion)
-  --auto-save           Automatically save report in reports/ folder
-  --deep-inspect        Enable deep active inspection (default: on)
-  --no-deep-inspect     Disable deep inspection
-  --skip-ping           Do NOT add -Pn (let Nmap perform host discovery)
-  --ipv6                Scan using IPv6
-  --email ADDRESS       Send report via email (requires SMTP config)
-  --slack URL           Slack webhook URL for notification
-  --config FILE         YAML/JSON configuration file
-  --interactive         Force interactive menu
-```
-
----
-
-6. Interactive Menu Guide
-
-Running cli.py without arguments opens the main menu with three scanning categories.
-
-Main Menu
-
-```
-[1] Network Discovery & Port Scanning
-[2] Vulnerability Assessment & Exploit Detection
-[3] Full Attack Surface Analysis (Network + Vulns)
-[4] About
-[5] Update & Maintenance
-[0] Exit
-```
-
-6.1 Network Discovery Sub‑menu
-
-Option Description
-1 – Quick TCP scan Common ports, fast, no version/vuln
-2 – Full TCP scan All 65535 ports, thorough
-3 – Turbo scan Ultra‑fast critical ports only
-4 – Stealth SYN scan Slow, fragmented, evasive
-5 – IPv6 network scan Scan IPv6 targets
-6 – Custom scan Enter your own Nmap flags
-
-6.2 Vulnerability Assessment Sub‑menu
-
-Option Description
-1 – Quick security scan Quick mode + NSE vuln scripts (no online API)
-2 – Common security scan Top 1000 ports + version detection + NSE scripts
-3 – Deep vulnerability scan Online NVD/Vulners lookups + deep inspection
-4 – Web application scan HTTP headers, TLS/SSL weaknesses only
-5 – AD / Kerberos scan AD‑specific ports with vulnerability scripts
-6 – Custom vulnerability scan Choose mode, API keys, deep inspection manually
-
-6.3 Full Attack Surface Analysis Sub‑menu
-
-Option Description
-1 – Standard full scan Full TCP + version + vulnerability scripts
-2 – Aggressive full scan Fast full scan with online CVE lookups
-3 – Stealth full scan Slow, evasive full scan with vulnerability checks
-4 – Turbo combo Critical ports + vulnerability detection
-
-After selecting a preset, you are prompted for a target and optionally for auto‑save and format.
-
----
-
-7. Output & Reporting
-
-Reports are produced in the following formats:
-
-Format File Extension Description
-Console – Coloured, real‑time summary with services, modules, vulnerabilities (severity‑coloured)
-JSON .json Complete machine‑readable data including CVSS, severity, exploit links
-CSV .csv Spreadsheet‑friendly: Proto/Port, Service, Product, Version, CVE, Severity, CVSS, Description, Exploit Links
-HTML .html Styled page with colour‑coded severity rows and clickable exploit links
-
-Use --format all to generate all three file types.
-
-When -o my_scan is specified, files are created as my_scan.json, my_scan.csv, my_scan.html.
-
-HTML reports require the Jinja2 library (already in requirements).
-
----
-
-8. Auto‑Save Feature
-
-If --auto-save is enabled (or selected in the interactive menus), reports are saved in a reports/ subdirectory. The directory is created automatically.
-
-Filename format:
-
-```
-reports/<sanitized_target>_<YYYYMMDD_HHMMSS>.<ext>
-```
-
-Example: reports/192.168.1.10_20260729_143015.json
-
-This is ideal for running regular scans and keeping historical records.
-
----
-
-9. Attack Surface Modules
-
-The scanner automatically classifies open ports into attack modules. This helps you quickly identify possible attack vectors.
-
-Module Ports Protocol Common Attacks / Exploits
-DHCP Attacker 67, 68 UDP DHCP spoofing, starvation
-DNS Attacker 53 TCP DNS cache poisoning, tunneling
-AD Attacker 88,135,139,389,464,636,3268,3269 TCP Kerberoasting, DCSync, LDAP injection
-SMB Attacker 139, 445 TCP EternalBlue (MS17-010), SMBGhost, Pass‑the‑Hash
-SNMP Sniffinger 161, 162 UDP Default community strings, information disclosure
-DoS Amplification 19,123,520,1900,11211 UDP NTP amplification, SSDP, memcached
-Install & Update 80,443,3389,5985,5986,8530,8531 TCP WSUS hijack, WinRM abuse, RDP brute force
-Print Spooler 515, 9100 TCP PrintNightmare
-LDAP Signing 389, 636 TCP LDAP without signing / channel binding
-MSSQL Attacker 1433 TCP SQL injection, remote code execution
-Kerberos Attacker 88 TCP Kerberoasting
-WinRM Attacker 5985, 5986 TCP Remote command execution
-RDP Attacker 3389 TCP BlueKeep, password spraying
-FTP / SSH Brute 21, 22 TCP Brute‑force, weak credentials
-HTTP(S) Exploitation 80,443,8080,8443 TCP Web app vulnerabilities, path traversal
-
----
-
-10. Vulnerability Detection Pipeline
-
-The scanner employs a multi‑step approach to identify and enrich vulnerabilities.
-
-10.1 Static Database
-
-A built‑in dictionary (extendable via static_vulns.json) maps (service, version) to known vulnerabilities. Examples:
-
-· (smb, 1.0) → MS17‑010 (EternalBlue)
-· (rdp, "") → CVE‑2019‑0708 (BlueKeep), CVE‑2020‑0610
-· (http, apache) → CVE‑2021‑41773
-
-You can add your own entries in a JSON file placed next to core.py.
-
-10.2 NSE Scripts
-
-When --vuln-check is active, a suite of NSE scripts is executed:
-
-· vulners
-· vuln
-· smb-vuln-*
-· rdp-vuln-*
-· http-vuln-*
-· ssl-*
-
-Results are parsed and displayed. In turbo mode only vulners and vuln are used.
-
-10.3 Live NVD Lookup
-
-Service name, product, and version are sent to the NVD API (requires --vuln-check). Each returned CVE includes:
-
-· CVE ID
-· Description
-· CVSS base score
-· Severity (Critical/High/Medium/Low)
-
-Results are cached for 1 hour to respect rate limits.
-
-10.4 Vulners Exploit Search
-
-If a Vulners API key is provided, the scanner queries Vulners for public exploits for each CVE. Links to the exploits are included in reports.
-
-10.5 Exploit‑DB Links
-
-Every CVE is linked to an Exploit‑DB search URL for manual research.
-
----
-
-11. Deep Inspection
-
-Deep inspection is enabled by default and performs non‑intrusive checks directly against open TCP services.
-
-Check What it does
-FTP Anonymous Tries USER anonymous / PASS anonymous, reports if login is allowed
-HTTP Security Headers Sends a GET request and checks for missing: HSTS, X‑Frame‑Options, X‑Content‑Type‑Options, CSP, X‑XSS‑Protection
-TLS/SSL Weaknesses Attempts connections with TLSv1.0 and TLSv1.1; checks for expired or self‑signed certificates
-
-These findings are treated as vulnerabilities with appropriate severity (e.g., anonymous FTP = HIGH, missing HSTS = MEDIUM).
-
-Disable deep inspection with --no-deep-inspect for a passive‑only scan.
-
----
-
-12. Evasion & Advanced Options
-
-12.1 Stealth Mode (--stealth)
-
-· T2 timing template (paranoid)
-· 500 ms scan delay
-· Random host order
-· Maximum 2 parallel threads
-· Automatically enables --fragment
-
-12.2 Aggressive Mode (--aggressive)
-
-· T5 timing
-· Minimum 2000 packets per second
-· Short timeouts (500 ms RTT, 1 min host)
-
-12.3 Other Evasion Techniques
-
-Option Description
---fragment Fragment IP packets (Nmap -f)
---source-port Spoof a source port (e.g., 53 for DNS)
---spoof-mac Spoof a MAC address
---decoys Use decoy IPs (comma‑separated)
---ttl Set a custom TTL
-
-12.4 Host Discovery Control
-
-By default, the scanner uses -Pn (no ping), meaning it assumes the target is up. For subnet scans where you want to skip dead hosts, use --skip-ping to let Nmap perform its usual host discovery.
-
-12.5 IPv6 Support
-
-Add --ipv6 to scan an IPv6 target. Nmap’s -6 flag is automatically included.
-
----
-
-13. Configuration File
-
-You can store recurring settings in a YAML or JSON configuration file. Command‑line arguments override the file.
-
-Example YAML config (config.yaml):
-
-```yaml
-mode: common
-vuln_check: true
-nvd_key: "abcdef123456"
-vulners_key: "xyz7890"
-deep_inspect: true
-auto_save: true
-format: json
-threads: 5
-output: "my_scan"
-smtp:
-  server: smtp.gmail.com
-  port: 587
-  user: you@gmail.com
-  password: app-password
-  from: you@gmail.com
-  to: security@company.com
-```
-
-Usage:
+Force the interactive menu:
 
 ```bash
-sudo python3 cli.py 192.168.1.0/24 --config config.yaml
+python cli.py --interactive
 ```
 
----
+The terminal UI uses the red Nemesis ASCII logo and compact numbered menus. Non-TTY output disables ANSI colors.
 
-14. API Keys Setup
+## 4. Main menu
 
-NVD API Key
+The main menu offers:
 
-1. Go to https://nvd.nist.gov/developers/request-an-api-key
-2. Fill in the form (a valid email is required)
-3. You will receive a key via email
-4. Use it with --nvd-key or in the configuration file
+1. **Network Discovery & Port Scanning:** choose a network scan preset.
+2. **Vulnerability Assessment:** review a saved result by IP or open new vulnerability-scan presets.
+3. **Full Attack Surface Analysis:** choose a combined scan preset.
+4. **About:** project and version information.
+5. **Update & Maintenance:** Git update and Python dependency actions.
+0. **Exit.**
 
-Without a key, the scanner is limited to 5 requests per 30 seconds. Caching helps but large scans will be slower.
+Menu input is numeric. Invalid choices are rejected and the menu remains available.
 
-Vulners API Key
+## 5. Network scan presets
 
-1. Sign up at https://vulners.com
-2. Go to your profile → API Keys → create a new key
-3. Pass it via --vulners-key or the config file
+| Preset | Behavior | Relative duration |
+| --- | --- | --- |
+| Quick TCP | Curated common TCP/UDP ports | Shortest general preset |
+| Full TCP | TCP ports 1–65535 plus the configured UDP list | Longest preset |
+| Turbo | Limited critical TCP/UDP list and aggressive Nmap timing | Fast, limited coverage |
+| Stealth SYN | Uses slower Nmap timing; may require elevated privileges | Slower |
+| IPv6 | Adds Nmap IPv6 mode | Depends on target/network |
+| Custom | Passes user-provided extra Nmap arguments | Depends on arguments |
 
-Without a key, exploit search is disabled.
+Port coverage and duration are approximate. Filtering, dropped packets, target response, privileges, and network quality can greatly change run time. Turbo deliberately checks fewer ports and can miss services.
 
----
+After selecting a preset, the menu asks for the target. It then asks whether to save a report automatically. When enabled, choose JSON, CSV, or HTML. The destination is `./reports/`.
 
-15. Troubleshooting
+## 6. Vulnerability assessment
 
-Q: I get nmap program was not found or nmap is not installed.
-A: Ensure Nmap is installed and in your PATH. On Linux/macOS, try which nmap. On Windows, add the Nmap installation folder to the system PATH.
+### 6.1 Review a saved result
 
-Q: The scan runs but reports no open ports on a target I know is alive.
-A: Check that you’re running as root. Without root, SYN scan (-sS) can’t be used and a slower connect scan may miss filtered ports. Also, try adding --skip-ping to enable host discovery.
+Choose **Vulnerability Assessment → Review a previous result**, enter an IPv4 or IPv6 address, and select the review level. The tool finds the latest matching JSON report in `reports/` using report-file modification time. If no report exists for that IP, run an authorized scan and save its report first.
 
-Q: The HTML report shows no styling or layout.
-A: Install jinja2 (pip install jinja2). Without it, the HTML report is skipped.
+| Level | Inputs | Network activity |
+| --- | --- | --- |
+| Quick | Existing report findings | None |
+| Medium | Existing findings plus local signatures in `core/static_vulns.json` | None |
+| Deep | Medium findings plus fresh NVD lookups for up to six services | NVD HTTP requests only; no new Nmap scan |
 
-Q: Deep inspection returns no results or hangs.
-A: Some firewalls may block the probing packets. Try --no-deep-inspect to skip active checks.
+Deep requests are limited to six services in the report to bound the number of online lookups. NVD can still rate-limit or delay requests. An optional NVD API key can help with rate limits.
 
-Q: NVD lookups are extremely slow.
-A: Without an API key, you’re rate‑limited. Obtain a free key and use --nvd-key.
+If a fresh NVD request fails and a matching response is cached, the cached result is returned with `data_source=local_cache_fallback`; the UI indicates that it is not fresh data. Successful fresh responses are stored in `core/nvd_cache.json`.
 
-Q: Turbo scan misses services I know exist on non‑default ports.
-A: Turbo only checks the top 15 TCP and 6 UDP ports. For full coverage, use common or full mode.
+After review, the user may save the reviewed findings separately. The output is `reports/<target>_review.json`.
 
----
+### 6.2 New vulnerability scan presets
 
-16. Legal Disclaimer
+The menu provides:
 
-⚠️ This tool is designed for authorised security testing only.
+- **Quick:** essential port preset with vulnerability correlation enabled.
+- **Medium:** common port range and version detection.
+- **Deep:** common scan plus online options and deep inspection.
+- **Web checks:** HTTP header/TLS inspection preset.
+- **Directory services:** common scan with optional extra Nmap arguments.
+- **Custom:** choose mode, Nmap vulnerability scripts, source, API keys, and deep inspection.
 
-You must have explicit written permission from the system owner before scanning any network or host. Unauthorised scanning is illegal under computer misuse laws (e.g., CFAA, UK Computer Misuse Act 1990). The author assumes no liability for misuse or damage caused by this tool.
+For supported presets, choose the CVE source:
 
-Use at your own risk.
+- **Offline:** local signature matching; no NVD request.
+- **Online:** fresh NVD query for discovered services. Successful responses populate the NVD cache.
+
+The local signature file is `core/static_vulns.json`. It is manually maintained; the application does not automatically download or update this file. Online NVD results are separate from these local signatures.
+
+## 7. Full Attack Surface Analysis presets
+
+The combined menu offers Standard, Aggressive, Stealth, and Turbo. Each option starts a new scan with the corresponding Nmap and vulnerability settings. The menu asks whether to save the resulting report. Review later through the saved-result workflow by IP.
+
+## 8. Scan mode details
+
+| Mode | TCP selection | UDP selection | Notes |
+| --- | --- | --- | --- |
+| `quick` | Curated list of about 38 common ports | Curated common list | Shorter list; service detection depends on vulnerability settings. |
+| `common` | 1–1000 | Configured common UDP list | Version detection enabled. |
+| `full` | 1–65535 | Configured common UDP list | Can take a long time. |
+| `turbo` | Curated critical list | Curated critical list | Uses T5, high packet rate, short timeouts, and limited port coverage. |
+| `custom` | Nmap arguments | Nmap arguments | Use `--nmap-args` to supply extra Nmap flags. |
+
+The Turbo arguments include `-Pn` by default, no DNS lookup, no retries, and a 30-second host timeout. These are configuration values, not a guarantee of total scan duration.
+
+## 9. CLI argument reference
+
+```text
+usage: cli.py [targets ...] [options]
+
+Targets:
+  IP address, hostname, or CIDR
+
+Options:
+  -m, --mode MODE          quick|common|full|custom|turbo (default: quick)
+  -t, --threads N          parallel target tasks (default: 10)
+  -o, --output NAME        output base path, no extension
+  --format FORMAT          json|csv|html|all (default: json)
+  --vuln-check             enable vulnerability correlation / Nmap scripts
+  --vuln-source SOURCE     offline|online (default: offline)
+  --nvd-key KEY            NVD API key
+  --vulners-key KEY        Vulners API key
+  --nmap-args ARGS         additional Nmap arguments
+  --stealth                slower stealth timing profile
+  --aggressive             aggressive timing profile
+  --turbo                  turbo port/timing profile
+  --fragment               request Nmap IP fragmentation
+  --source-port PORT       set source port
+  --spoof-mac MAC          set MAC address option
+  --decoys LIST            comma-separated Nmap decoy values
+  --ttl VALUE              packet TTL
+  --auth-check             reserved option; no current scan action
+  --auto-save              save a timestamped report under reports/
+  --deep-inspect           enable deep service checks (default enabled)
+  --no-deep-inspect        disable deep service checks
+  --skip-ping              allow Nmap host discovery instead of default -Pn
+  --ipv6                   IPv6 scan mode
+  --email ADDRESS          parsed; not currently sent by scan runner
+  --slack URL              parsed; not currently sent by scan runner
+  --config FILE            parsed; configuration loading is not implemented
+  --interactive            force the interactive menu
+```
+
+### Examples
+
+```bash
+# Quick scan of an authorized host
+python cli.py 192.0.2.10 -m quick
+
+# Common scan, local vulnerability correlation, timestamped JSON report
+python cli.py 192.0.2.10 -m common --vuln-check --vuln-source offline --auto-save
+
+# Write JSON, CSV, and HTML using an explicit output base
+python cli.py 192.0.2.10 -m common --vuln-check -o reports/assessment --format all
+
+# Force interactive mode
+python cli.py --interactive
+```
+
+`--format all` applies to the explicit `-o` output path and writes all three extensions. Auto-save writes one chosen format. In non-interactive mode, auto-save with `--format all` selects JSON.
+
+## 10. Reports
+
+### Formats
+
+- **Console:** colored summary of target, OS, services, modules, and findings.
+- **JSON:** complete structured result including raw service data.
+- **CSV:** rows for services and associated vulnerability fields.
+- **HTML:** styled report generated when Jinja2 is installed.
+
+### Paths
+
+- Scan: `reports/<sanitized-target>_<YYYYMMDD_HHMMSS>.<ext>`.
+- Review: `reports/<target>_review.json`.
+
+Reports may contain internal IPs, service banners, product versions, CVE findings, and timestamps. Store and share them according to your organization’s data-handling rules.
+
+## 11. Vulnerability data and caching
+
+### Local signatures
+
+`core/static_vulns.json` contains manually maintained service/product-version signatures. Its JSON structure maps keys such as `"smb,1.0"` to a list of description strings. To add an entry, preserve valid JSON and the same key/list structure. The scanner does not automatically update this file.
+
+### NVD cache
+
+Online queries go to the NVD CVE API. Successful results are cached in `core/nvd_cache.json` and can be reused by an Offline lookup for an exactly matching query term. Online requests are fresh; cache is only used for Offline lookup or as a labeled fallback if NVD is unavailable.
+
+NVD keyword results are candidates, not confirmation that a CVE affects the device. Confirm the exact vendor, product, version, configuration, and advisory before making remediation decisions.
+
+### Vulners and Exploit-DB
+
+Vulners search requires a Vulners API key. Exploit-DB links are search URLs for manual reference; the tool does not execute exploits.
+
+## 12. Service inspection and severity
+
+When deep inspection is enabled, the scanner performs checks such as anonymous FTP login attempts, HTTP security-header checks, and TLS protocol/certificate checks. These are active requests to discovered services and must only be used within authorized scope.
+
+Severity and CVSS availability depend on the source record. Local signature severity is inferred from simple description keywords; it is not a vendor-confirmed risk score. NVD CVSS information is more specific, but still requires validation against the actual installed product/version.
+
+## 13. Dependency list
+
+- `python-nmap`: Python interface to the Nmap executable.
+- `requests`: online NVD and Vulners HTTP requests.
+- `colorama`: colored console reports.
+- `jinja2` (optional): HTML report generation.
+
+`PyYAML` and `tqdm` are not currently required by the code. The `--config` option is accepted by the argument parser but config-file loading is not implemented.
+
+## 14. Troubleshooting
+
+**Nmap executable not found**
+
+Install Nmap and make sure `nmap` is available on `PATH`.
+
+**Permission denied or incomplete scan**
+
+Some scan types require elevated privileges. Confirm authorization and use only the privilege level required for the selected scan.
+
+**No saved report for the IP**
+
+Run an authorized scan, enable auto-save, and verify a JSON report exists in `reports/` for the same IP.
+
+**Deep review takes time or returns fewer results**
+
+Deep performs up to six NVD requests. Network delays, NVD rate limiting, service/product keyword quality, and API availability affect the result.
+
+**Cache fallback notice appears**
+
+NVD was unavailable; the displayed cached entries are not fresh. Retry later if current data is required.
+
+**HTML output is skipped**
+
+Install Jinja2 in the Python environment used to run Nemesis Scanner.
+
+**Python import errors**
+
+Activate the intended environment and run `python -m pip install -r requirements.txt` using that same Python interpreter.
+
+## 15. Legal notice
+
+Nemesis Scanner is for authorized security assessment only. Obtain explicit permission, define the scope, and coordinate testing windows before scanning. The maintainers assume no responsibility for unauthorized use, service impact, or damages.

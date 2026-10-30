@@ -2,17 +2,27 @@
 # =============================================================================
 # cli.py – Nemesis Scanner | Interactive Menu + CLI + Auto-Save in reports/
 # UI/UX inspired by Project Nemesis main dashboard
-# Requires: core.py (NemesisScanner, Reporter, VERSION) – Monster Edition v3.0.0
+# Requires: core.py (NemesisScanner, Reporter, VERSION) – Nemesis Scanner v4.0.0
 # =============================================================================
 import sys
 import os
 import asyncio
 import argparse
 import subprocess
-import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List
+from cli.ui import (
+    Colors,
+    banner,
+    choose_option,
+    clear_screen,
+    confirm,
+    pause,
+    print_error,
+    print_success,
+    render_menu,
+)
 
 # ---------- Import core with fallback for various project structures ----------
 try:
@@ -26,51 +36,6 @@ except ImportError:
         Reporter = core_mod.Reporter
         CORE_VERSION = core_mod.VERSION
 
-# ---------------------------------------------------------------------------
-# Terminal colour & UI helpers
-# ---------------------------------------------------------------------------
-class Colors:
-    RED     = "\033[1;31m"
-    MUTED   = "\033[0;31m"
-    CYAN    = "\033[1;36m"
-    YELLOW  = "\033[1;33m"
-    GREEN   = "\033[1;32m"
-    BOLD    = "\033[1m"
-    RESET   = "\033[0m"
-    HLINE = "─"
-    VLINE = "│"
-    TOPL  = "┌"
-    TOPR  = "┐"
-    BOTL  = "└"
-    BOTR  = "┘"
-
-if not sys.stdout.isatty():
-    for attr in dir(Colors):
-        if not attr.startswith("_") and isinstance(getattr(Colors, attr), str):
-            setattr(Colors, attr, "")
-    Colors.HLINE = "-"
-    Colors.VLINE = "|"
-    Colors.TOPL = "+"
-    Colors.TOPR = "+"
-    Colors.BOTL = "+"
-    Colors.BOTR = "+"
-
-def clear_screen():
-    os.system("clear" if os.name != "nt" else "cls")
-
-def banner(text: str):
-    width = 60
-    top = f"{Colors.RED}{Colors.TOPL}{Colors.HLINE * (width - 2)}{Colors.TOPR}"
-    pad = (width - 2 - len(text)) // 2
-    middle = (
-        f"{Colors.VLINE}{' ' * pad}{Colors.BOLD}{text}{Colors.RESET}{Colors.RED}"
-        f"{' ' * (width - 2 - len(text) - pad)}{Colors.VLINE}"
-    )
-    bottom = f"{Colors.BOTL}{Colors.HLINE * (width - 2)}{Colors.BOTR}{Colors.RESET}"
-    print(top)
-    print(middle)
-    print(bottom)
-
 def logo():
     clear_screen()
     print(f"""{Colors.RED}
@@ -81,10 +46,7 @@ def logo():
 ██║ ╚████║███████╗██║ ╚═╝ ██║███████╗███████║██║███████║
 ╚═╝  ╚═══╝╚══════╝╚═╝     ╚═╝╚══════╝╚══════╝╚═╝╚══════╝
 {Colors.RESET}""")
-    print(f"{Colors.MUTED}                 Nemesis Scanner – Monster Edition v{CORE_VERSION}{Colors.RESET}\n")
-
-def pause():
-    input(f"\n{Colors.MUTED}Press Enter to return...{Colors.RESET}")
+    print(f"{Colors.MUTED}                 Nemesis Scanner v{CORE_VERSION}{Colors.RESET}\n")
 
 # ---------------------------------------------------------------------------
 # Auto-save filename generator
@@ -126,6 +88,7 @@ async def run_scan(targets: List[str], scan_args):
             deep_inspect=getattr(scan_args, 'deep_inspect', True),
             skip_ping=getattr(scan_args, 'skip_ping', False),
             ipv6=getattr(scan_args, 'ipv6', False),
+            vuln_source=getattr(scan_args, 'vuln_source', 'offline'),
         )
         tasks.append(scanner.full_analysis())
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -172,13 +135,15 @@ def build_scan_args(targets: List[str], mode="quick", threads=10, stealth=False,
                     aggressive=False, turbo=False, fragment=False, source_port=None,
                     spoof_mac=None, decoys=None, ttl=None, auth_check=False,
                     deep_inspect=True, skip_ping=False, ipv6=False,
-                    auto_save=False, format="json", output=None):
+                    auto_save=False, format="json", output=None,
+                    vuln_source="offline"):
     args = argparse.Namespace()
     args.targets = targets
     args.mode = mode
     args.threads = threads
     args.stealth = stealth
     args.vuln_check = vuln_check
+    args.vuln_source = vuln_source
     args.nmap_args = nmap_args
     args.nvd_key = nvd_key
     args.vulners_key = vulners_key
@@ -211,22 +176,19 @@ class ScannerMenu:
     @staticmethod
     def main_menu():
         while True:
-            clear_screen()
-            logo()
-            banner("Main Menu")
-            print(f"""{Colors.YELLOW}
-  [1] Network Discovery & Port Scanning
-  [2] Vulnerability Assessment & Exploit Detection
-  [3] Full Attack Surface Analysis (Network + Vulns)
-  [4] About
-  [5] Update & Maintenance
-  [0] Exit / Return to Dashboard
-{Colors.RESET}""")
-            choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
+            render_menu(f"Nemesis Scanner v{CORE_VERSION} | Main Menu", [
+                ("1", "Network Discovery & Port Scanning", "scan a network target"),
+                ("2", "Vulnerability Assessment", "review a saved report or scan"),
+                ("3", "Full Attack Surface Analysis", "network scan + vulnerability checks"),
+                ("4", "About", "version and project information"),
+                ("5", "Update & Maintenance", "project and dependencies"),
+                ("0", "Exit", "close the application"),
+            ], brand="")
+            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             if choice == "1":
                 ScannerMenu.network_scan_menu()
             elif choice == "2":
-                ScannerMenu.vuln_scan_menu()
+                ScannerMenu.vulnerability_lookup_menu()
             elif choice == "3":
                 ScannerMenu.combined_scan_menu()
             elif choice == "4":
@@ -236,7 +198,7 @@ class ScannerMenu:
             elif choice == "0":
                 return
             else:
-                print(f"{Colors.RED}Invalid option.{Colors.RESET}")
+                    # logo()  # Avoid duplicating the logo on the main menu
                 pause()
 
     # --------------------------- about ------------------------------------
@@ -263,19 +225,14 @@ infrastructure engineering.
     @staticmethod
     def update():
         while True:
-            clear_screen()
-            logo()
-            banner("Update & Maintenance")
-            print(f"{Colors.CYAN}Current version: {Colors.BOLD}{CORE_VERSION}{Colors.RESET}\n")
-            print(f"""{Colors.YELLOW}
-  [1] Check for updates (git pull)
-  [2] Install/update Python dependencies (pip install -r requirements.txt)
-  [3] Force reinstall all dependencies
-  [4] View installed packages
-  [0] Back
-{Colors.RESET}""")
-            
-            choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
+            render_menu(f"Update & Maintenance | v{CORE_VERSION}", [
+                ("1", "Check for project updates", "git fetch/pull"),
+                ("2", "Install or update dependencies", "requirements.txt"),
+                ("3", "Reinstall dependencies", "reinstall listed packages"),
+                ("4", "View installed packages", "pip list"),
+                ("0", "Back", "return to main menu"),
+            ], hint="Dependency changes affect the active Python environment.")
+            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             
             if choice == "0":
                 break
@@ -300,7 +257,7 @@ infrastructure engineering.
                         status = subprocess.run(['git', 'status', '-uno'], capture_output=True, text=True)
                         if 'Your branch is behind' in status.stdout:
                             print(f"{Colors.YELLOW}Updates available!{Colors.RESET}")
-                            if input(f"{Colors.YELLOW}Run 'git pull' to update? [y/N]: {Colors.RESET}").strip().lower() in ("y","yes"):
+                            if confirm("Run 'git pull' to update the project?"):
                                 print(f"{Colors.CYAN}Running git pull...{Colors.RESET}")
                                 result = subprocess.run(['git', 'pull'], capture_output=True, text=True)
                                 if result.returncode == 0:
@@ -310,7 +267,7 @@ infrastructure engineering.
                                     
                                     # Offer to update requirements
                                     if os.path.exists("requirements.txt"):
-                                        if input(f"{Colors.CYAN}Update Python dependencies too? [Y/n]: {Colors.RESET}").strip().lower() not in ("n","no"):
+                                        if confirm("Update Python dependencies too?", default=True):
                                             print(f"{Colors.CYAN}Updating dependencies...{Colors.RESET}")
                                             ret = os.system(f"{sys.executable} -m pip install -r requirements.txt")
                                             if ret == 0:
@@ -368,7 +325,7 @@ infrastructure engineering.
                 print()
                 if os.path.exists("requirements.txt"):
                     print(f"{Colors.YELLOW}Force reinstalling all dependencies...{Colors.RESET}")
-                    if input(f"{Colors.YELLOW}This will reinstall all packages. Continue? [y/N]: {Colors.RESET}").strip().lower() in ("y","yes"):
+                    if confirm("This will reinstall all packages. Continue?"):
                         try:
                             result = subprocess.run(
                                 [sys.executable, '-m', 'pip', 'install', '--force-reinstall', '-r', 'requirements.txt'],
@@ -402,8 +359,8 @@ infrastructure engineering.
                 pause()
             
             else:
-                print(f"{Colors.RED}Invalid option.{Colors.RESET}")
-                time.sleep(0.5)
+                print_error("Invalid option. Choose one of the listed numbers.")
+                pause()
 
     # -------------------------------------------------------------------
     # Network scan presets
@@ -411,19 +368,16 @@ infrastructure engineering.
     @staticmethod
     def network_scan_menu():
         while True:
-            clear_screen()
-            logo()
-            banner("Network Discovery & Port Scanning")
-            print(f"""{Colors.YELLOW}
-  [1] Quick TCP scan (common ports, fast)
-  [2] Full TCP scan (1-65535, thorough)
-  [3] Turbo scan (top critical ports, ultra-fast)
-  [4] Stealth SYN scan (slow, firewall evasion)
-  [5] IPv6 network scan
-  [6] Custom scan (add your own Nmap arguments)
-  [0] Back to Main Menu
-{Colors.RESET}""")
-            choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
+            render_menu("Network Discovery & Port Scanning", [
+                ("1", "Quick TCP scan", "common ports, shortest wait"),
+                ("2", "Full TCP scan", "ports 1-65535, longest wait"),
+                ("3", "Turbo scan", "critical ports, fastest"),
+                ("4", "Stealth SYN scan", "slower; requires appropriate authorization"),
+                ("5", "IPv6 scan", "scan an IPv6 target"),
+                ("6", "Custom scan", "provide Nmap arguments"),
+                ("0", "Back", "return to main menu"),
+            ], hint="Choose a scan type. You will be asked for the target next.")
+            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             if choice in ("1","2","3","4","5","6"):
                 target = input(f"{Colors.CYAN}Target (IP or CIDR): {Colors.RESET}").strip()
                 if not target:
@@ -451,11 +405,14 @@ infrastructure engineering.
                     extra = input(f"{Colors.CYAN}Extra Nmap arguments: {Colors.RESET}").strip()
                     args = build_scan_args([target], mode="custom", nmap_args=extra,
                                            vuln_check=False, auto_save=False)
-                auto = input(f"{Colors.CYAN}Auto-save report? [y/N]: {Colors.RESET}").strip().lower()
-                if auto == "y":
+                if confirm("Save a report automatically after the scan?"):
                     args.auto_save = True
-                    fmt = input(f"{Colors.CYAN}  Format (json/csv/html) [json]: {Colors.RESET}").strip().lower()
-                    args.format = fmt if fmt in ("json","csv","html") else "json"
+                    args.format = choose_option(
+                        "Report format (json/csv/html) [json]: ",
+                        {"json", "csv", "html"},
+                        default="json",
+                    )
+                    print(f"{Colors.MUTED}Reports will be saved in ./reports/.{Colors.RESET}")
                 run_scan_sync(args.targets, args)
                 pause()
             elif choice == "0":
@@ -465,64 +422,115 @@ infrastructure engineering.
                 pause()
 
     # -------------------------------------------------------------------
+    # Offline / online vulnerability lookup
+    # -------------------------------------------------------------------
+    @staticmethod
+    def vulnerability_lookup_menu():
+        from cli.report_review import review_saved_result
+
+        while True:
+            render_menu("Vulnerability Assessment", [
+                ("1", "Review a previous result", "offline or online CVE review by IP"),
+                ("2", "Start a new vulnerability scan", "choose Fast, Medium, Deep or Custom"),
+                ("0", "Back", "return to main menu"),
+            ], hint="Reviewing a saved result does not start a network scan.")
+            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
+            if choice == "0":
+                return
+            if choice == "2":
+                ScannerMenu.vuln_scan_menu()
+                continue
+            if choice == "1":
+                review_saved_result()
+                continue
+            else:
+                print_error("Invalid option.")
+                pause()
+                continue
+
+    # -------------------------------------------------------------------
     # Vulnerability scan presets
     # -------------------------------------------------------------------
     @staticmethod
     def vuln_scan_menu():
         while True:
-            clear_screen()
-            logo()
-            banner("Vulnerability Assessment & Exploit Detection")
-            print(f"""{Colors.YELLOW}
-  [1] Quick security scan (fast, essential ports, NSE scripts)
-  [2] Common security scan (balanced, top 1000 ports, version & NSE)
-  [3] Deep vulnerability scan (thorough, online CVE lookups, exploit search)
-  [4] Web application security scan (HTTP headers, TLS, SSL issues)
-  [5] Active Directory / Kerberos focused scan
-  [6] Custom vulnerability scan (choose mode and options)
-  [0] Back to Main Menu
-{Colors.RESET}""")
-            choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
+            render_menu("Vulnerability Scan Presets", [
+                ("1", "Quick", "essential ports, shorter wait"),
+                ("2", "Medium", "top 1000 ports, balanced wait"),
+                ("3", "Deep", "thorough checks; may take much longer"),
+                ("4", "Web checks", "HTTP headers and TLS inspection"),
+                ("5", "Directory services", "focused service checks"),
+                ("6", "Custom", "choose scan mode and options"),
+                ("0", "Back", "return to previous menu"),
+            ], hint="Select a preset. The next step asks for the target and CVE source.")
+            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             if choice in ("1","2","3","4","5","6"):
                 target = input(f"{Colors.CYAN}Target (IP or hostname): {Colors.RESET}").strip()
                 if not target:
                     print(f"{Colors.RED}Target required!{Colors.RESET}")
                     pause()
                     continue
+                vuln_source = "offline"
+                if choice in ("1", "2", "3", "5", "6"):
+                    source_choice = choose_option(
+                        "CVE source: [1] Offline local DB (default), [2] Online NVD [1]: ",
+                        {"1", "2"},
+                        default="1",
+                    )
+                    if source_choice is None:
+                        pause()
+                        continue
+                    vuln_source = "online" if source_choice == "2" else "offline"
                 args = None
                 if choice == "1":
                     args = build_scan_args([target], mode="quick", vuln_check=True,
-                                           threads=10, auto_save=False)
+                                           threads=10, auto_save=False,
+                                           vuln_source=vuln_source)
                 elif choice == "2":
                     args = build_scan_args([target], mode="common", vuln_check=True,
-                                           threads=10, auto_save=False)
+                                           threads=10, auto_save=False,
+                                           vuln_source=vuln_source)
                 elif choice == "3":
-                    nvd = input(f"{Colors.CYAN}NVD API key (optional): {Colors.RESET}").strip() or None
-                    vulners = input(f"{Colors.CYAN}Vulners API key (optional): {Colors.RESET}").strip() or None
+                    nvd = None
+                    if vuln_source == "online":
+                        nvd = input(f"{Colors.CYAN}NVD API key (optional): {Colors.RESET}").strip() or None
+                    vulners = None
+                    if vuln_source == "online":
+                        vulners = input(f"{Colors.CYAN}Vulners API key (optional): {Colors.RESET}").strip() or None
                     args = build_scan_args([target], mode="common", vuln_check=True,
                                            nvd_key=nvd, vulners_key=vulners,
-                                           deep_inspect=True, auto_save=False)
+                                           deep_inspect=True, auto_save=False,
+                                           vuln_source=vuln_source)
                 elif choice == "4":
                     args = build_scan_args([target], mode="quick", vuln_check=False,
                                            deep_inspect=True, auto_save=False)
                 elif choice == "5":
                     extra = input(f"{Colors.CYAN}Additional Nmap args (or Enter): {Colors.RESET}").strip()
                     args = build_scan_args([target], mode="common", vuln_check=True,
-                                           nmap_args=extra, auto_save=False)
+                                           nmap_args=extra, auto_save=False,
+                                           vuln_source=vuln_source)
                 elif choice == "6":
                     mode = input(f"{Colors.CYAN}Mode (quick/common/full) [quick]: {Colors.RESET}").strip().lower() or "quick"
-                    vuln = input(f"{Colors.CYAN}Use NSE vuln scripts? [Y/n]: {Colors.RESET}").strip().lower() != "n"
-                    nvd = input(f"{Colors.CYAN}NVD API key (optional): {Colors.RESET}").strip() or None
-                    vulners = input(f"{Colors.CYAN}Vulners API key (optional): {Colors.RESET}").strip() or None
-                    deep = input(f"{Colors.CYAN}Enable deep active inspection? [Y/n]: {Colors.RESET}").strip().lower() != "n"
+                    vuln = confirm("Enable Nmap vulnerability scripts?", default=True)
+                    nvd = None
+                    if vuln_source == "online":
+                        nvd = input(f"{Colors.CYAN}NVD API key (optional): {Colors.RESET}").strip() or None
+                    vulners = None
+                    if vuln_source == "online":
+                        vulners = input(f"{Colors.CYAN}Vulners API key (optional): {Colors.RESET}").strip() or None
+                    deep = confirm("Enable deep service inspection?", default=True)
                     args = build_scan_args([target], mode=mode, vuln_check=vuln,
                                            nvd_key=nvd, vulners_key=vulners,
-                                           deep_inspect=deep, auto_save=False)
-                auto = input(f"{Colors.CYAN}Auto-save report? [y/N]: {Colors.RESET}").strip().lower()
-                if auto == "y":
+                                           deep_inspect=deep, auto_save=False,
+                                           vuln_source=vuln_source)
+                if confirm("Save a report automatically after the scan?"):
                     args.auto_save = True
-                    fmt = input(f"{Colors.CYAN}  Format (json/csv/html) [json]: {Colors.RESET}").strip().lower()
-                    args.format = fmt if fmt in ("json","csv","html") else "json"
+                    args.format = choose_option(
+                        "Report format (json/csv/html) [json]: ",
+                        {"json", "csv", "html"},
+                        default="json",
+                    )
+                    print(f"{Colors.MUTED}Reports will be saved in ./reports/.{Colors.RESET}")
                 run_scan_sync(args.targets, args)
                 pause()
             elif choice == "0":
@@ -537,17 +545,14 @@ infrastructure engineering.
     @staticmethod
     def combined_scan_menu():
         while True:
-            clear_screen()
-            logo()
-            banner("Full Attack Surface Analysis")
-            print(f"""{Colors.YELLOW}
-  [1] Standard full scan (all TCP, version detection, vulnerability scripts)
-  [2] Aggressive full scan (fast, with online CVE lookups)
-  [3] Stealth full scan (slow, evasive, with vulnerability checks)
-  [4] Turbo combo (critical ports + vulnerability detection)
-  [0] Back to Main Menu
-{Colors.RESET}""")
-            choice = input(f"{Colors.CYAN}Choice: {Colors.RESET}").strip()
+            render_menu("Full Attack Surface Analysis", [
+                ("1", "Standard", "full ports + vulnerability checks; longest wait"),
+                ("2", "Aggressive", "faster timing + online CVE lookup"),
+                ("3", "Stealth", "slower timing; only use with authorization"),
+                ("4", "Turbo", "critical ports; fastest combined preset"),
+                ("0", "Back", "return to main menu"),
+            ], hint="Choose a preset. You will be asked for a target next.")
+            choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             if choice in ("1","2","3","4"):
                 target = input(f"{Colors.CYAN}Target (IP or CIDR): {Colors.RESET}").strip()
                 if not target:
@@ -574,11 +579,14 @@ infrastructure engineering.
                     args = build_scan_args([target], mode="turbo", turbo=True,
                                            vuln_check=True, deep_inspect=True,
                                            auto_save=False)
-                auto = input(f"{Colors.CYAN}Auto-save report? [y/N]: {Colors.RESET}").strip().lower()
-                if auto == "y":
+                if confirm("Save a report automatically after the scan?"):
                     args.auto_save = True
-                    fmt = input(f"{Colors.CYAN}  Format (json/csv/html) [json]: {Colors.RESET}").strip().lower()
-                    args.format = fmt if fmt in ("json","csv","html") else "json"
+                    args.format = choose_option(
+                        "Report format (json/csv/html) [json]: ",
+                        {"json", "csv", "html"},
+                        default="json",
+                    )
+                    print(f"{Colors.MUTED}Reports will be saved in ./reports/.{Colors.RESET}")
                 run_scan_sync(args.targets, args)
                 pause()
             elif choice == "0":
@@ -624,6 +632,8 @@ def parse_args():
     parser.add_argument("-m", "--mode", default="quick")
     parser.add_argument("--stealth", action="store_true")
     parser.add_argument("--vuln-check", action="store_true")
+    parser.add_argument("--vuln-source", choices=["offline", "online"], default="offline",
+                        help="CVE lookup source: local database or live NVD (default: offline)")
     parser.add_argument("--nvd-key")
     parser.add_argument("--vulners-key")
     parser.add_argument("--nmap-args", default="")
