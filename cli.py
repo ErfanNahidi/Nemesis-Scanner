@@ -27,14 +27,17 @@ from cli.ui import (
 # ---------- Import core with fallback for various project structures ----------
 try:
     from core import NemesisScanner, Reporter, VERSION as CORE_VERSION
+    from core.history import RecentTargetStore
 except ImportError:
     try:
         from core.core import NemesisScanner, Reporter, VERSION as CORE_VERSION
+        from core.history import RecentTargetStore
     except ImportError:
         import core as core_mod
         NemesisScanner = core_mod.NemesisScanner
         Reporter = core_mod.Reporter
         CORE_VERSION = core_mod.VERSION
+        from core.history import RecentTargetStore
 
 def logo():
     clear_screen()
@@ -57,6 +60,22 @@ def auto_save_filename(target: str, ext: str) -> str:
     safe_target = target.replace('/', '_').replace(':', '_').replace('\\', '_')
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return str(reports_dir / f"{safe_target}_{timestamp}.{ext}")
+
+
+def prompt_recent_target() -> str:
+    recent = RecentTargetStore().get_recent()
+    if not recent:
+        return ""
+    print(f"{Colors.CYAN}Recent scanned targets:{Colors.RESET}")
+    for idx, target in enumerate(recent, 1):
+        print(f"  {idx}. {target}")
+    choice = input(f"{Colors.CYAN}Select recent target [1-{len(recent)} / press Enter to type a new one]: {Colors.RESET}").strip()
+    if not choice:
+        return ""
+    if choice.isdigit() and 1 <= int(choice) <= len(recent):
+        return recent[int(choice) - 1]
+    print(f"{Colors.YELLOW}Invalid recent target selection, please enter a new target.{Colors.RESET}")
+    return ""
 
 # ---------------------------------------------------------------------------
 # Async scan runner
@@ -99,6 +118,16 @@ async def run_scan(targets: List[str], scan_args):
             continue
         if not result:
             continue
+
+        target = str(result.get('target', '')).strip()
+        if target:
+            RecentTargetStore().add_target(
+                target,
+                scan_mode=getattr(scan_args, 'mode', 'quick'),
+                status='success',
+                source='scan',
+            )
+
         Reporter.console_report(result, verbose=getattr(scan_args, 'verbose', False))
 
         if getattr(scan_args, 'output', None):
@@ -379,7 +408,9 @@ infrastructure engineering.
             ], hint="Choose a scan type. You will be asked for the target next.")
             choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             if choice in ("1","2","3","4","5","6"):
-                target = input(f"{Colors.CYAN}Target (IP or CIDR): {Colors.RESET}").strip()
+                target = input(f"{Colors.CYAN}Target (IP or CIDR) or press Enter for recent: {Colors.RESET}").strip()
+                if not target:
+                    target = prompt_recent_target()
                 if not target:
                     print(f"{Colors.RED}Target required!{Colors.RESET}")
                     pause()
@@ -465,7 +496,9 @@ infrastructure engineering.
             ], hint="Offline uses local data; Online queries NVD. Deep checks can take longer.")
             choice = input(f"{Colors.CYAN}Select option: {Colors.RESET}").strip()
             if choice in ("1","2","3","4","5","6"):
-                target = input(f"{Colors.CYAN}Target (IP or hostname): {Colors.RESET}").strip()
+                target = input(f"{Colors.CYAN}Target (IP or hostname) or press Enter for recent: {Colors.RESET}").strip()
+                if not target:
+                    target = prompt_recent_target()
                 if not target:
                     print(f"{Colors.RED}Target required!{Colors.RESET}")
                     pause()
