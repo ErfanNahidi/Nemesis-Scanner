@@ -307,8 +307,11 @@ class NemesisScanner:
             udp = TURBO_UDP
             return f"T:{','.join(map(str,tcp))},U:{','.join(map(str,udp))}"
         elif self.scan_mode == "quick":
+            # Keep the quick mode intentionally fast and aligned with its advertised profile:
+            # a small set of common service ports, plus a safe fallback to a wider range if
+            # the host comes back empty.
             tcp = QUICK_TCP
-            udp = QUICK_UDP  # now using constant
+            udp = QUICK_UDP
             return f"T:{','.join(map(str,tcp))},U:{','.join(map(str,udp))}"
         elif self.scan_mode == "common":
             udp = FULL_UDP_PORTS
@@ -356,9 +359,14 @@ class NemesisScanner:
         elif self.scan_mode == "quick" and self.vuln_check:
             args.append("-sV --version-intensity 3")  # lighter for quick
         if self.vuln_check:
-            # Comprehensive NSE scripts
-            scripts = "vulners,vuln,smb-vuln-*,rdp-vuln-*,http-vuln-*,ssl-*"
-            args.append(f"--script {scripts}")
+            # Keep vulnerability scripts on the explicit deep path. The default quick/common
+            # presets should not rely on a very aggressive wildcard script set that can yield
+            # empty TCP results on hosts with restricted or filtered service exposure.
+            if self.scan_mode in ("common", "full"):
+                scripts = "vulners,vuln,smb-vuln-*,rdp-vuln-*,http-vuln-*,ssl-*"
+                args.append(f"--script {scripts}")
+            elif self.scan_mode == "quick":
+                args.append("--script vuln --script-timeout 10s")
         # OS detection for non-quick (optional)
         if self.scan_mode in ("common", "full", "custom"):
             args.append("-O --osscan-guess")
@@ -372,7 +380,7 @@ class NemesisScanner:
             args.append("--max-scan-delay 0")
         else:
             if self.scan_mode == "quick":
-                args.append("-T5 --min-rate 1500 --host-timeout 2m")
+                args.append("-T5 --min-rate 2500 --host-timeout 45s")
             else:
                 args.append("-T4 --min-rate 800 --host-timeout 8m")
 
@@ -403,6 +411,30 @@ class NemesisScanner:
                 pool,
                 lambda: self.nm.scan(self.target, arguments=nmap_args)
             )
+
+        # Fallback for the false-empty result pattern: if a script-heavy quick scan finds host up
+        # but no TCP services, retry with a safer port set and without aggressive NSE wildcard
+        # script filters. This preserves the feature while avoiding misleading "No open services"
+        # results on valid hosts.
+        if self.target in self.nm.all_hosts():
+            host_data = self.nm[self.target]
+            tcp_data = host_data.get("tcp", {})
+            if not tcp_data and self.scan_mode in ("quick", "common"):
+                fallback_args = (
+                    "-Pn -sT -p 1-1000 -T4 --max-retries 1 --host-timeout 1m"
+                )
+                logger.warning(
+                    "No TCP services returned for %s with the default preset; retrying with a safe fallback scan (%s)",
+                    self.target,
+                    fallback_args,
+                )
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    await loop.run_in_executor(
+                        pool,
+                        lambda: self.nm.scan(self.target, arguments=fallback_args)
+                    )
+                    host_data = self.nm[self.target]
+
         if self.target in self.nm.all_hosts():
             self.scan_data = self.nm[self.target]
             os_matches = self.scan_data.get("osmatch", [])
