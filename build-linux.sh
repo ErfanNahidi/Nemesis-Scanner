@@ -23,7 +23,7 @@ DIST="$ROOT/dist"
 STAGE="$ROOT/build/package-root"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/usr/bin" "$STAGE/usr/share/doc/nemesis-scanner-cli"
-install -m 0755 "$DIST/nemesis-scanner" "$STAGE/usr/bin/nemesis-scanner"
+install -m 0755 "$DIST/nemesis-scanner" "$STAGE/usr/bin/nemesis-scanner-cli"
 install -m 0644 README.md README_FA.md MANUAL.md LICENSE \
     "$STAGE/usr/share/doc/nemesis-scanner-cli/"
 
@@ -71,12 +71,12 @@ Standalone command-line scanner interface using the system Nmap executable.
 %build
 
 %install
-install -Dpm0755 %{SOURCE0} %{buildroot}%{_bindir}/nemesis-scanner
+install -Dpm0755 %{SOURCE0} %{buildroot}%{_bindir}/nemesis-scanner-cli
 install -d %{buildroot}%{_docdir}/%{name}
 install -pm0644 %{SOURCE1} %{SOURCE2} %{SOURCE3} %{SOURCE4} %{buildroot}%{_docdir}/%{name}/
 
 %files
-%{_bindir}/nemesis-scanner
+%{_bindir}/nemesis-scanner-cli
 %{_docdir}/%{name}/README.md
 %{_docdir}/%{name}/README_FA.md
 %{_docdir}/%{name}/MANUAL.md
@@ -94,7 +94,7 @@ cp "$RPM_TOP/RPMS/x86_64/nemesis-scanner-cli-${VERSION}-1."*.rpm \
 ARCH_ROOT="$ROOT/build/arch-root"
 rm -rf "$ARCH_ROOT"
 mkdir -p "$ARCH_ROOT/usr/bin" "$ARCH_ROOT/usr/share/doc/nemesis-scanner-cli"
-install -m 0755 "$DIST/nemesis-scanner" "$ARCH_ROOT/usr/bin/nemesis-scanner"
+install -m 0755 "$DIST/nemesis-scanner" "$ARCH_ROOT/usr/bin/nemesis-scanner-cli"
 install -m 0644 README.md README_FA.md MANUAL.md LICENSE \
     "$ARCH_ROOT/usr/share/doc/nemesis-scanner-cli/"
 cat > "$ARCH_ROOT/.PKGINFO" <<EOF

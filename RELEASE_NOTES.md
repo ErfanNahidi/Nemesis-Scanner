@@ -14,6 +14,9 @@ The packages bundle the Python runtime and Python dependencies. Nmap remains a s
 for actual scans. DEB, RPM, and Arch installers declare Nmap as a package dependency; install Nmap
 separately before running the AppImage or Windows executable.
 
+Installed DEB, RPM, and Arch packages provide the `nemesis-scanner-cli` command, allowing the CLI
+and GUI packages to coexist without a shared launcher path.
+
 ## Data and permissions
 
 Recent-target history and NVD cache files now use the standard per-user data directory instead of

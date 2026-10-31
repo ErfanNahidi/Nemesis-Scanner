@@ -51,6 +51,10 @@ chmod +x dist/NemesisScanner-CLI-4.1.1-x86_64.AppImage
 ./dist/NemesisScanner-CLI-4.1.1-x86_64.AppImage
 ```
 
+After installing a system package, launch the CLI with `nemesis-scanner-cli`. This command is
+separate from the GUI's `nemesis-scanner-gui` launcher, so both applications can be installed
+together. AppImage users can launch the downloaded file directly as shown below.
+
 Install Nmap through your distribution's package manager. The AppImage is built on Fedora and
 may need a compatible glibc on older Linux distributions.
 

@@ -43,6 +43,10 @@ Windows: install Nmap from [nmap.org](https://nmap.org/download.html) and add it
 
 ### 2.3 Install Python requirements
 
+For packaged Linux installations, use the distribution package and launch the application with
+`nemesis-scanner-cli`. This command can coexist with the GUI launcher `nemesis-scanner-gui`.
+The AppImage is launched directly from its downloaded file.
+
 From the project directory:
 
 ```bash

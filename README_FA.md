@@ -51,6 +51,10 @@ chmod +x dist/NemesisScanner-CLI-4.1.1-x86_64.AppImage
 ./dist/NemesisScanner-CLI-4.1.1-x86_64.AppImage
 ```
 
+پس از نصب بستهٔ سیستم، CLI را با فرمان `nemesis-scanner-cli` اجرا کنید. این فرمان با اجراکنندهٔ
+گرافیکی `nemesis-scanner-gui` جداست و بنابراین هر دو برنامه می‌توانند هم‌زمان نصب باشند. کاربران
+AppImage می‌توانند فایل دانلودشده را مستقیماً مطابق دستور پایین اجرا کنند.
+
 AppImage روی Fedora ساخته شده و ممکن است در توزیع‌های قدیمی لینوکس به glibc سازگار نیاز داشته باشد.
 برای ساخت بسته‌ها در لینوکس x86_64، ابزارهای PyInstaller، `rpmbuild`، `dpkg-deb` و `zstd` را نصب و
 `./build-linux.sh` را اجرا کنید. برای ساخت EXE ویندوز، در PowerShell دستور `./build-windows.ps1` را
