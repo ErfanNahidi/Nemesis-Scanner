@@ -1,0 +1,35 @@
+{
+  "smb,1.0": [
+    "MS17-010 (EternalBlue) - RCE via SMBv1"
+  ],
+  "smb,3.1.1": [
+    "CVE-2020-0796 (SMBGhost) - RCE"
+  ],
+  "smb,2.0": [
+    "CVE-2017-0144 (EternalChampion/EternalSynergy)"
+  ],
+  "rdp,": [
+    "CVE-2019-0708 (BlueKeep) - RCE",
+    "CVE-2020-0610 - RCE"
+  ],
+  "dns,": [
+    "CVE-2020-1350 (SigRed) - RCE"
+  ],
+  "snmp,": [
+    "Default community strings - info disclosure"
+  ],
+  "winrm,": [
+    "CVE-2015-0010 - auth bypass (older versions)"
+  ],
+  "mssql,": [
+    "CVE-2020-0618 - RCE (Reporting Services)",
+    "CVE-2019-1068 - SQL Server RCE"
+  ],
+  "http,apache": [
+    "CVE-2021-41773 (Path Traversal/RCE in Apache 2.4.49)"
+  ],
+  "http,iis": [
+    "CVE-2017-7269 (IIS 6.0 RCE)",
+    "CVE-2015-1635 (HTTP.sys RCE)"
+  ]
+}

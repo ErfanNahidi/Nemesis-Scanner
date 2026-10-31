@@ -2,6 +2,7 @@
 __pycache__
 reports
 *.json
+!core/static_vulns.json
 /core/__pycache__
 /refactor
 *.txt
