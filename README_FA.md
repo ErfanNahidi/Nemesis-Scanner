@@ -1,4 +1,4 @@
-# Nemesis Scanner نسخهٔ 4.1.0
+# Nemesis Scanner نسخهٔ 4.1.1
 
 [English](README.md) · [راهنمای کامل](MANUAL.md)
 
@@ -14,7 +14,7 @@ Nemesis Scanner یک رابط خط فرمان Python برای Nmap است. می�
 - بازبینی گزارش ذخیره‌شده با IP دستگاه در سطح‌های Quick، Medium و Deep.
 - بازبینی Deep برای حداکثر ۶ سرویس گزارش به NVD درخواست تازه می‌فرستد؛ اسکن Nmap جدید اجرا نمی‌کند.
 - گزارش‌های JSON، CSV و HTML و امکان ذخیرهٔ خودکار.
-- امضاهای محلی در `core/static_vulns.json` و cache پایدار پاسخ‌های NVD در `core/nvd_cache.json`.
+- امضاهای محلی در `core/static_vulns.json` و cache پایدار پاسخ‌های NVD در پوشهٔ دادهٔ کاربر.
 
 ## پیش‌نیازها
 
@@ -28,6 +28,33 @@ Nemesis Scanner یک رابط خط فرمان Python برای Nmap است. می�
 ## نصب
 
 ابتدا Nmap را نصب کنید.
+
+### بسته‌های آمادهٔ لینوکس
+
+اسکریپت ساخت لینوکس فایل‌های AppImage، RPM، DEB و Arch را در پوشهٔ `dist/` می‌سازد. فایل اجرایی
+پایتون و کتابخانه‌های پایتونی را همراه دارد؛ نصب جداگانهٔ Python لازم نیست. برای اسکن، Nmap لازم
+است: بسته‌های RPM، DEB و Arch آن را به‌عنوان وابستگی اعلام می‌کنند. در AppImage باید Nmap را جداگانه
+نصب کنید.
+
+```bash
+# Debian / Ubuntu
+sudo apt install ./dist/nemesis-scanner-cli_4.1.1_amd64.deb
+
+# Fedora و توزیع‌های مبتنی بر RPM
+sudo dnf install ./dist/nemesis-scanner-cli-4.1.1-1.x86_64.rpm
+
+# Arch Linux
+sudo pacman -U ./dist/nemesis-scanner-cli-4.1.1-1-x86_64.pkg.tar.zst
+
+# AppImage؛ ابتدا Nmap را نصب کنید
+chmod +x dist/NemesisScanner-CLI-4.1.1-x86_64.AppImage
+./dist/NemesisScanner-CLI-4.1.1-x86_64.AppImage
+```
+
+AppImage روی Fedora ساخته شده و ممکن است در توزیع‌های قدیمی لینوکس به glibc سازگار نیاز داشته باشد.
+برای ساخت بسته‌ها در لینوکس x86_64، ابزارهای PyInstaller، `rpmbuild`، `dpkg-deb` و `zstd` را نصب و
+`./build-linux.sh` را اجرا کنید. برای ساخت EXE ویندوز، در PowerShell دستور `./build-windows.ps1` را
+اجرا کنید؛ Nmap باید روی ویندوز نصب باشد.
 
 ```bash
 # Debian / Ubuntu
@@ -171,7 +198,7 @@ python cli.py --interactive
 ## منبع CVE، دادهٔ محلی و cache
 
 - `core/static_vulns.json` فهرست امضاهای محلی و دستی است که بررسی Offline/Medium از آن استفاده می‌کند. نمونهٔ کلید: `"smb,1.0"` و مقدار آن فهرستی از توضیحات است.
-- lookup آنلاین NVD درخواست تازه می‌فرستد و پاسخ موفق را در `core/nvd_cache.json` ذخیره می‌کند.
+- lookup آنلاین NVD درخواست تازه می‌فرستد و پاسخ موفق را در پوشهٔ دادهٔ کاربر ذخیره می‌کند.
 - lookup آفلاین NVD می‌تواند پاسخ cacheشدهٔ قبلی را برای عبارت جست‌وجوی متناظر بخواند. فایل امضاهای دستی و cache NVD دو منبع جدا هستند.
 - نتایج NVD جست‌وجوی کلیدواژه‌ای بر اساس نام سرویس/محصول/نسخه هستند و به‌تنهایی اثبات نمی‌کنند CVE روی دستگاه اعمال می‌شود. نسخه و توصیهٔ فروشنده را بررسی کنید.
 - ابزار به‌روزرسان خودکار برای `static_vulns.json` ندارد.
@@ -183,7 +210,7 @@ python cli.py --interactive
 - گزارش اسکن زمان‌دار: `reports/<target>_<YYYYMMDD_HHMMSS>.<ext>`.
 - گزارش بازبینی: `reports/<target>_review.json`.
 - امضاهای محلی: `core/static_vulns.json`.
-- cache پاسخ NVD: `core/nvd_cache.json`.
+- cache پاسخ NVD و تاریخچهٔ هدف‌های اخیر: `~/.local/share/nemesis-scanner/` در Linux و macOS یا `%LOCALAPPDATA%\\nemesis-scanner\\` در Windows. در سیستم‌های Unix می‌توانید مسیر ریشه را با `XDG_DATA_HOME` تغییر دهید.
 
 گزارش‌ها ممکن است IP، سرویس‌ها، نسخه‌ها، جزئیات آسیب‌پذیری و زمان اسکن را داشته باشند؛ آن‌ها را مانند دادهٔ حساس ارزیابی امنیتی نگهداری کنید.
 

@@ -1,4 +1,4 @@
-# Nemesis Scanner v4.1.0
+# Nemesis Scanner v4.1.1
 
 [فارسی](README_FA.md) · [Full Manual](MANUAL.md)
 
@@ -14,7 +14,7 @@ Nemesis Scanner is a Python command-line interface around Nmap. It can scan expl
 - Saved-report review by device IP at Quick, Medium, and Deep levels.
 - Deep saved-report review refreshes CVEs online for at most six services; it does not start a new scan.
 - JSON, CSV, and HTML reports, plus optional automatic report saving.
-- Local signatures in `core/static_vulns.json` and persistent NVD response cache in `core/nvd_cache.json`.
+- Local signatures in `core/static_vulns.json` and a persistent per-user NVD response cache.
 
 ## Requirements
 
@@ -28,6 +28,38 @@ Some Nmap scan types and operating-system detection need administrator/root priv
 ## Install
 
 Install Nmap first.
+
+### Prebuilt Linux packages
+
+The Linux build creates an AppImage, RPM, DEB, and Arch package under `dist/`. The executable
+bundles Python and the Python libraries, so a separate Python installation is not needed. Nmap is
+still required for scanning: the RPM, DEB, and Arch packages declare it as a dependency; install
+Nmap separately before using the AppImage.
+
+```bash
+# Debian / Ubuntu
+sudo apt install ./dist/nemesis-scanner-cli_4.1.1_amd64.deb
+
+# Fedora / RPM-based distributions
+sudo dnf install ./dist/nemesis-scanner-cli-4.1.1-1.x86_64.rpm
+
+# Arch Linux
+sudo pacman -U ./dist/nemesis-scanner-cli-4.1.1-1-x86_64.pkg.tar.zst
+
+# AppImage: after installing Nmap, make it executable and launch it in a terminal
+chmod +x dist/NemesisScanner-CLI-4.1.1-x86_64.AppImage
+./dist/NemesisScanner-CLI-4.1.1-x86_64.AppImage
+```
+
+Install Nmap through your distribution's package manager. The AppImage is built on Fedora and
+may need a compatible glibc on older Linux distributions.
+
+### Build packages
+
+On x86_64 Linux, install PyInstaller, `rpmbuild`, `dpkg-deb`, `zstd`, and Nmap, then run
+`./build-linux.sh`. Set `APPIMAGETOOL` to an AppImageKit executable to also build the AppImage.
+On Windows, install Nmap and Python, then run `./build-windows.ps1` in PowerShell to make
+`dist/windows/NemesisScanner.exe`.
 
 ```bash
 # Debian / Ubuntu
@@ -173,7 +205,7 @@ python cli.py --interactive
 ## CVE sources, local data, and cache
 
 - `core/static_vulns.json` is the hand-maintained local signature list used by Offline/Medium review. Entries use keys such as `"smb,1.0"` and lists of descriptions.
-- Online NVD lookups make fresh requests and store successful responses in `core/nvd_cache.json`.
+- Online NVD lookups make fresh requests and store successful responses in the per-user data directory.
 - Offline NVD lookup can read previously cached NVD responses for matching query terms. The local signature file and NVD cache are separate.
 - NVD results are keyword matches against service/product/version strings, not proof that a particular CVE applies. Verify product/version and vendor advisories before taking action.
 - No automatic updater for `static_vulns.json` is included.
@@ -185,7 +217,7 @@ Get an NVD API key at [NVD API Key Request](https://nvd.nist.gov/developers/requ
 - Timestamped scan reports: `reports/<target>_<YYYYMMDD_HHMMSS>.<ext>`.
 - Reviewed reports: `reports/<target>_review.json`.
 - Local signatures: `core/static_vulns.json`.
-- NVD response cache: `core/nvd_cache.json`.
+- NVD cache and recent-target history: `~/.local/share/nemesis-scanner/` on Linux and macOS, or `%LOCALAPPDATA%\\nemesis-scanner\\` on Windows. Set `XDG_DATA_HOME` to customize the Unix data root.
 
 Reports can contain IP addresses, discovered services, versions, vulnerability details, and timestamps. Treat them as sensitive assessment data.
 

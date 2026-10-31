@@ -1,0 +1,16 @@
+.gitignore
+__pycache__
+reports
+*.json
+/core/__pycache__
+/refactor
+*.txt
+.venv
+.vscode
+new_design.md
+scanner.code-workspace
+/build/
+/dist/
+/*.spec
+__pycache__/
+**/__pycache__/

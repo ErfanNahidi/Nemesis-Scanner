@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-# core.py – Nemesis Scanner v4.1.0
+# core.py – Nemesis Scanner v4.1.1
 # Author: Erfan Nahidi
 # Use only on systems you own or have explicit written permission to test.
 # =============================================================================
@@ -25,7 +25,7 @@ from .vulnerability import (
 # ---------------------------------------------------------------------------
 # Constants & Configuration
 # ---------------------------------------------------------------------------
-VERSION = "4.1.0"
+VERSION = "4.1.1"
 
 EXPLOITDB_SEARCH = "https://www.exploit-db.com/search?cve="
 

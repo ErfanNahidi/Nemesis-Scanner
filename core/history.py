@@ -5,8 +5,10 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from .paths import user_data_dir
 
-DEFAULT_HISTORY_PATH = Path(__file__).resolve().parent.parent / "reports" / "recent_targets.json"
+
+DEFAULT_HISTORY_PATH = user_data_dir() / "recent_targets.json"
 
 
 class RecentTargetStore:

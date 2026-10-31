@@ -1,4 +1,4 @@
-# Nemesis Scanner v4.1.0 — Full Manual
+# Nemesis Scanner v4.1.1 — Full Manual
 
 [English README](README.md) · [راهنمای فارسی](README_FA.md)
 
@@ -124,7 +124,7 @@ Choose **Vulnerability Assessment → Review a previous result**, enter an IPv4 
 
 Deep requests are limited to six services in the report to bound the number of online lookups. NVD can still rate-limit or delay requests. An optional NVD API key can help with rate limits.
 
-If a fresh NVD request fails and a matching response is cached, the cached result is returned with `data_source=local_cache_fallback`; the UI indicates that it is not fresh data. Successful fresh responses are stored in `core/nvd_cache.json`.
+If a fresh NVD request fails and a matching response is cached, the cached result is returned with `data_source=local_cache_fallback`; the UI indicates that it is not fresh data. Successful fresh responses are stored in the per-user data directory (`~/.local/share/nemesis-scanner/` on Linux/macOS or `%LOCALAPPDATA%\\nemesis-scanner\\` on Windows).
 
 After review, the user may save the reviewed findings separately. The output is `reports/<target>_review.json`.
 
@@ -242,7 +242,7 @@ Reports may contain internal IPs, service banners, product versions, CVE finding
 
 ### NVD cache
 
-Online queries go to the NVD CVE API. Successful results are cached in `core/nvd_cache.json` and can be reused by an Offline lookup for an exactly matching query term. Online requests are fresh; cache is only used for Offline lookup or as a labeled fallback if NVD is unavailable.
+Online queries go to the NVD CVE API. Successful results are cached in the per-user data directory and can be reused by an Offline lookup for an exactly matching query term. Online requests are fresh; cache is only used for Offline lookup or as a labeled fallback if NVD is unavailable.
 
 NVD keyword results are candidates, not confirmation that a CVE affects the device. Confirm the exact vendor, product, version, configuration, and advisory before making remediation decisions.
 
